@@ -105,20 +105,183 @@ app.get('/test-balance', async (req, res) => {
   }
 });
 
-// // Should print: c59032929c876ef5e04d027b419d9c3d
-// console.log(generateChecksumAxisTest({
-//   corpAccNum: "918010009499978",
-//   channelId: "TXB",
-//   corpCode: "DEMOCORP9"
-// }));
+app.post('/test-fund-transfer', async (req, res) => {
+  const payload = {
+    corpCode: "DEMOCORP159",
+    channelId: "KITEPAY",
+    txnRefNo: `KITE-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    beneficiary: {
+      accNum: "123456789012",  // Test beneficiary
+      ifsc: "AXIS0000001",
+      name: "TEST KITEPAY"
+    },
+    amount: "1000.00",
+    remarks: "KitePay UAT Test Transfer"
+  };
 
-// // gave: 89840b0cde6c95841e5ab45bbd9afcbc
+  try {
+    const url = config.urls[config.env].fundTransfer;
+    const headers = buildHeaders();
+    const jwsPayload = await jweEncryptAndSign(payload);
 
-// function generateChecksumAxisTest(data) {
-//   // EXACT order from Get Balance spec[file:2] + checksum doc[file:7]
-//   const str = `${data.corpAccNum}${data.channelId}${data.corpCode}`;
-//   return crypto.createHash('md5').update(str, 'utf8').digest('hex');
-// }
+    const axisResp = await axisRequest({
+      method: 'POST',
+      url,
+      headers,
+      data: jwsPayload
+    });
+
+    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
+    res.json({
+      rawAxisStatus: axisResp.status,
+      request: payload,
+      decrypted
+    });
+  } catch (err) {
+    handleAxisError(err, res);
+  }
+});
+
+app.post('/test-add-beneficiary', async (req, res) => {
+  const payload = {
+    corpCode: "DEMOCORP159",
+    channelId: "KITEPAY",
+    action: "ADD",
+    beneficiary: {
+      nickName: "kitepay_merchant_001",
+      accNum: "987654321098",
+      ifsc: "AXIS0000002",
+      name: "KitePay Merchant Test"
+    }
+  };
+
+  try {
+    const url = config.urls[config.env].beneficiary;
+    const headers = buildHeaders();
+    const jwsPayload = await jweEncryptAndSign(payload);
+
+    const axisResp = await axisRequest({
+      method: 'POST',
+      url,
+      headers,
+      data: jwsPayload
+    });
+
+    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
+    res.json({
+      rawAxisStatus: axisResp.status,
+      request: payload,
+      decrypted
+    });
+  } catch (err) {
+    handleAxisError(err, res);
+  }
+});
+
+app.post('/test-txn-status', async (req, res) => {
+  const { txnRefNo, bankRefNo } = req.body; // POST body input
+  
+  const payload = {
+    corpCode: "DEMOCORP159",
+    channelId: "KITEPAY",
+    txnRefNo,
+    bankRefNo // Optional
+  };
+
+  try {
+    const url = config.urls[config.env].txnStatus;
+    const headers = buildHeaders();
+    const jwsPayload = await jweEncryptAndSign(payload);
+
+    const axisResp = await axisRequest({
+      method: 'POST',
+      url,
+      headers,
+      data: jwsPayload
+    });
+
+    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
+    res.json({
+      rawAxisStatus: axisResp.status,
+      request: payload,
+      decrypted
+    });
+  } catch (err) {
+    handleAxisError(err, res);
+  }
+});
+
+app.get('/test-list-beneficiaries', async (req, res) => {
+  const payload = {
+    corpCode: "DEMOCORP159",
+    channelId: "KITEPAY",
+    action: "LIST"
+  };
+
+  try {
+    const url = config.urls[config.env].beneficiary;
+    const headers = buildHeaders();
+    const jwsPayload = await jweEncryptAndSign(payload);
+
+    const axisResp = await axisRequest({
+      method: 'POST',
+      url,
+      headers,
+      data: jwsPayload
+    });
+
+    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
+    res.json({
+      rawAxisStatus: axisResp.status,
+      decrypted
+    });
+  } catch (err) {
+    handleAxisError(err, res);
+  }
+});
+
+app.post('/test-statement', async (req, res) => {
+  const { corpAccNum, fromDate, toDate } = req.body;
+  
+  const payload = {
+    corpCode: "DEMOCORP159",
+    corpAccNum: corpAccNum || "309010100067740",
+    fromDate: fromDate || "2026-01-01",
+    toDate: toDate || "2026-01-31"
+  };
+
+  try {
+    const url = config.urls[config.env].statement;
+    const headers = buildHeaders();
+    const jwsPayload = await jweEncryptAndSign(payload);
+
+    const axisResp = await axisRequest({
+      method: 'POST',
+      url,
+      headers,
+      data: jwsPayload
+    });
+
+    const decrypted = await jweVerifyAndDecrypt(axisResp.data);
+    res.json({
+      rawAxisStatus: axisResp.status,
+      request: payload,
+      decrypted
+    });
+  } catch (err) {
+    handleAxisError(err, res);
+  }
+});
+
+function handleAxisError(err, res) {
+  const status = err.response?.status || 500;
+  res.status(status).json({
+    error: true,
+    message: err.message,
+    axisStatus: err.response?.status,
+    axisData: err.response?.data
+  });
+}
 
 const PORT = 3000;
 app.listen(PORT, () => {
