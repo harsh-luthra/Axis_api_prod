@@ -3,7 +3,7 @@ const fs = require('fs');
 const https = require('https');
 const axios = require('axios');
 
-const p12Buffer = fs.readFileSync('./certs/client-axis.p12');
+const p12Buffer = fs.readFileSync('./certs/keystore.p12');
 
 const axisHttpsAgent = new https.Agent({
   pfx: p12Buffer,

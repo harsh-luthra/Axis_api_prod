@@ -30,8 +30,8 @@ module.exports = {
     // Axis public cert for JWE encryption + JWS verification (.cer/.pem)
     axisPublicCertPath: './certs/rgw.jwejws.uat.axisb.com-sscert.txt',
     // Your PKCS#12 that contains your RSA private key for signing + decrypting
-    clientP12Path: './certs/your-client.p12',
-    clientP12Password: 'P12_PASSWORD'
+    clientP12Path: './certs/keystore.p12',
+    clientP12Password: 'Axis1234@A'
   },
 
   // Callback AES key etc (from callback docs)

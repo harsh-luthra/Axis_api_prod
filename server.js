@@ -1,9 +1,9 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 // const { decryptAes128Base64 } = require('./security/aesCallback');
-const { verifyChecksumAxis } = require('./security/checksumAxis');
+const { verifyChecksumAxis } = require('./src/security/checksumAxis');
 
-const { decryptAes256Callback } = require('./security/aesCallback');
+const { decryptAes256Callback } = require('./src/security/aesCallback');
 
 const app = express();
 
