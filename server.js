@@ -8,7 +8,7 @@ const { decryptAes256Callback } = require('./src/security/aesCallback');
 const { v4: uuidv4 } = require('uuid');
 const { axisRequest } = require('./src/http/axisHttp');
 const config = require('./src/config/axisConfig');
-const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('./src/security/jweJws');
+const { jweEncryptAndSign, jweVerifyAndDecrypt, loadJoseKeys,  } = require('./src/security/jweJws');
 
 const app = express();
 
@@ -102,6 +102,7 @@ app.get('/test-balance', async (req, res) => {
     });
   }
 });
+
 
 const PORT = 3000;
 app.listen(PORT, () => {

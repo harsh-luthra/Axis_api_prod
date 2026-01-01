@@ -61,10 +61,14 @@ async function jweEncryptAndSign(payloadObj) {
     .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
     .encrypt(publicKeyForEncrypt);
 
+  console.log('JWE compact Encrypted:', jweCompact);  // log this string
+
   // JWS sign JWE string
   const jwsCompact = await new CompactSign(enc.encode(jweCompact))
     .setProtectedHeader({ alg: 'RS256' })
     .sign(privateKeyForSign);
+
+  console.log('JWE compact EncryptedSigned:', jweCompact);  // log this string
 
   return jwsCompact;
 }
