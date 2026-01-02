@@ -133,10 +133,10 @@ app.get('/test-balance', async (req, res) => {
 });
 
 // /test-add-beneficiary
-app.post('/test-bene-enquiry', async (req, res) => {
+app.post('/test-add-beneficiary', async (req, res) => {
   try {
-    console.log('🔍 Testing Bene Enquiry API...', req.body);
-    const result = await require('./src/api/beneEnquiry').beneEnquiry(req.body);
+    console.log('🔍 Testing Add Beneficiary API...', req.body);
+    const result = await require('./src/api/addBeneficiary').addBeneficiary(req.body);
     
     res.json({
       success: true,
@@ -144,17 +144,17 @@ app.post('/test-bene-enquiry', async (req, res) => {
       rawAxisStatus: result.raw ? 200 : 'Error',
       rawResponse: result.raw,
       decrypted: result.decrypted,
-      beneficiaryCount: result.decrypted?.Data?.data?.count || 0,
-      beneficiaries: result.decrypted?.Data?.data?.beneDetails || []
+      beneCode: result.decrypted?.Data?.data?.beneDetails?.beneCode || 'N/A',
+      status: result.decrypted?.Data?.status || 'N/A'
     });
   } catch (error) {
-    console.error('❌ Bene Enquiry API Error:', error.message);
+    console.error('❌ Add Beneficiary API Error:', error.message);
     res.status(error.response?.status || 500).json({
       success: false,
       error: error.message,
       axisStatus: error.response?.status || 500,
       axisData: error.response?.data || error.axisData,
-      requestBody: req.body
+      requestBody: req.body  // Debug input
     });
   }
 });
