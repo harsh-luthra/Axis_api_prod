@@ -5,6 +5,7 @@ const config = require('../config/axisConfig');
 const { jweEncryptAndSign, jweVerifyAndDecrypt } = require('../security/jweJws');
 const { generateChecksumAxis } = require('../security/checksumAxis');
 const { axisRequest } = require('../http/axisHttp');
+const db = require('../db/payouts');  // NEW
 
 function baseHeaders() {
   const now = Date.now().toString();
@@ -27,7 +28,7 @@ function buildBalanceData(corpAccNum) {
     corpCode: config.corpCode,
     checksum: ''
   };
-//   data.checksum = generateChecksum(data);
+  //   data.checksum = generateChecksum(data);
   data.checksum = generateChecksumAxis(data);
   return { Data: data };
 }
@@ -39,7 +40,7 @@ async function getBalance() {
   const body = buildBalanceData(corpAccNum);
   const encryptedAndSigned = await jweEncryptAndSign(body);
 
-//   const response = await axios.post(url, encryptedAndSigned, { headers });
+  //   const response = await axios.post(url, encryptedAndSigned, { headers });
 
   const response = await axisRequest({
         url,
@@ -48,10 +49,21 @@ async function getBalance() {
         data: encryptedAndSigned
     });
 
-  const decrypted = await jweVerifyAndDecrypt(response.data);
-  return { raw: response.data, decrypted };
+    const decrypted = await jweVerifyAndDecrypt(response.data);
+
+    // NEW: Persist snapshot
+    await db.saveBalanceSnapshot(merchantId, corpAccNum, decrypted);
+    
+    return { 
+      raw: response.data, 
+      decrypted,
+      merchantId,  // Pass through
+      snapshotSaved: true 
+    };
 }
 
 module.exports = {
   getBalance
 };
+
+

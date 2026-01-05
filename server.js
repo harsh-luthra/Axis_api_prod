@@ -17,33 +17,12 @@ const crypto = require('crypto');
 const { fundTransfer } = require('./src/api/transferPayment');
 const { getTransferStatus } = require('./src/api/getTransferStatus');
 
+const db = require('./src/db/payouts');
+
 const app = express();
 
 app.use(bodyParser.json());
 app.use(bodyParser.text({ type: '*/*' }));
-
-// --------- CALLBACK (already working) ----------
-app.post('/axis/callback', async (req, res) => {
-  try {
-    const cipher = req.body.GetStatusResponseBodyEncrypted || req.body;
-    const decryptedJson = decryptAes256Callback(cipher);
-    const parsed = JSON.parse(decryptedJson);
-
-    const data = parsed.data || parsed.Data || parsed;
-    const isValidChecksum = verifyChecksumAxis(data);
-
-    if (!isValidChecksum) {
-      console.error('Invalid checksum in callback');
-      return res.status(400).send('Checksum verification failed');
-    }
-
-    console.log('Callback data:', data);
-    res.status(200).send('OK');
-  } catch (err) {
-    console.error('Callback error', err);
-    res.status(500).send('ERROR');
-  }
-});
 
 // --------- HELPERS FOR GET BALANCE ----------
 function buildHeaders() {
@@ -73,31 +52,89 @@ function buildGetBalanceData(corpAccNum) {
   return { Data: data };
 }
 
-app.get('/test-get-balance', async (req, res) => {
+// --------- NEW CALLBACK HANDLER ----------
+router.post('/axis/callback', async (req, res) => {
   try {
-    console.log('🔍 Testing Balance API...');
-    const result = await getBalance();
-    
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      rawAxisStatus: result.raw ? 200 : 'Error',
-      rawResponse: result.raw,
-      decrypted: result.decrypted,
-      balance: result.decrypted?.Data?.data?.Balance || 'N/A'
-    });
-  } catch (error) {
-    console.error('❌ Balance API Error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      axisStatus: error.axisStatus || 500,
-      axisData: error.axisData
-    });
+    const encrypted =
+      req.body?.GetStatusResponseBodyEncrypted || req.body;
+
+    if (!encrypted) {
+      console.error('❌ Missing encrypted payload');
+      return res.status(200).send('OK'); // do NOT fail callback
+    }
+
+    const decryptedJson = decryptAes256Callback(encrypted);
+    const parsed = JSON.parse(decryptedJson);
+
+    const data = parsed?.data || parsed?.Data || parsed;
+
+    if (!verifyChecksumAxis(data)) {
+      console.error('❌ Axis callback checksum failed');
+      return res.status(200).send('OK'); // Axis retry safe
+    }
+
+    /* ===========================
+       EXTRACT CRN & STATUS
+    =========================== */
+    const record = data?.CUR_TXN_ENQ?.[0];
+
+    if (!record?.crn) {
+      console.error('❌ CRN missing in callback');
+      return res.status(200).send('OK');
+    }
+
+    // res.status(200).send('OK');
+
+    const txnUpdate = {
+      crn: record.crn,
+      transactionId: record.transaction_id,
+      utr: record.utrNo,
+      status: record.transactionStatus,
+      statusDesc: record.statusDescription,
+      amount: record.amount,
+      processedAt: record.processingDate
+    };
+
+    console.log('✅ Axis Callback Received:', txnUpdate);
+
+    await db.handleCallback(txnUpdate);  // NEW: Persist!
+
+    // TODO:
+    // 1. Idempotent update using CRN
+    // 2. Ignore duplicates
+    // 3. Persist status transition
+
+    res.status(200).send('OK'); // ALWAYS 200
+
+  } catch (err) {
+    console.error('❌ Callback Fatal Error:', err);
+    res.status(200).send('OK'); // Never return non-200
   }
 });
 
 // --------- TEST BALANCE ENDPOINT ----------
+app.get('/balance/:merchantId', async (req, res) => {
+  try {
+    const merchantId = parseInt(req.params.merchantId);
+    const result = await require('./src/api/getBalance').getBalance(merchantId);
+    
+    // Latest snapshot
+    const latest = await db.getLatestBalance(merchantId);
+    
+    res.json({
+      success: true,
+      merchantId,
+      axisBalance: result.decrypted?.Data?.data?.balance,
+      appPending: latest?.app_pending_out || 0,
+      reconciled: latest?.reconciled || false,
+      fetchedAt: latest?.fetched_at,
+      snapshotId: latest?.id
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get Balance
 app.get('/test-balance', async (req, res) => {
   const corpAccNum = '309010100067740';
@@ -162,36 +199,6 @@ app.post('/test-add-beneficiary', async (req, res) => {
   }
 });
 
-
-// /test-bene-enquiry  
-app.post('/test-bene-enquiry', async (req, res) => {
-  try {
-    console.log('🔍 Testing Bene Enquiry API...', req.body);
-    const result = await require('./src/api/beneEnquiry').beneEnquiry(req.body);
-    
-    res.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      rawAxisStatus: result.raw ? 200 : 'Error',
-      rawResponse: result.raw,
-      decrypted: result.decrypted,
-      beneficiaryCount: result.decrypted?.Data?.data?.count || 0,
-      beneficiaries: result.decrypted?.Data?.data?.beneDetails || [],
-      status: result.decrypted?.Data?.status || 'N/A'
-    });
-  } catch (error) {
-    console.error('❌ Bene Enquiry API Error:', error.message);
-    res.status(error.response?.status || 500).json({
-      success: false,
-      error: error.message,
-      axisStatus: error.response?.status || 500,
-      axisData: error.response?.data || error.axisData,
-      requestBody: req.body  // Debug input
-    });
-  }
-});
-
-
 // /test-transfer-payment
 app.post('/fund-transfer', async (req, res) => {
   try {
@@ -221,6 +228,10 @@ app.post('/fund-transfer', async (req, res) => {
     /* ===========================
        SUCCESS
     =========================== */
+
+    const payoutId = await db.createPayoutTransfer(req.body, result);
+    console.log(`💾 Payout saved ID: ${payoutId}`);
+
     return res.status(200).json({
       success: true,
       axisStatus: data.status || 'S',
@@ -292,6 +303,10 @@ app.post('/fund-transfer/status', async (req, res) => {
     /* ===========================
        SUCCESS
     =========================== */
+
+    const statusData = data.data?.CURTXNENQ?.[0] || {};
+    await db.updatePayoutStatus(req.body.crn, statusData);
+
     res.status(200).json({
       success: true,
       axisStatus: data.status,
