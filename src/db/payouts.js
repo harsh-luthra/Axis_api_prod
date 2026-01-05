@@ -88,14 +88,22 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
 async function updatePayoutStatus(crn, axisResponse) {
   const safeNull = (val) => val === '' || val == null ? null : val;
   
-  // ✅ Handle ARRAY (CUR_TXN_ENQ)
+  // ✅ Fix DD-MM-YYYY → YYYY-MM-DD
+  const parseProcessingDate = (dateStr) => {
+    if (!dateStr) return null;
+    try {
+      const [datePart, timePart] = dateStr.split(' ');
+      const [dd, mm, yyyy] = datePart.split('-');
+      return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')} ${timePart}`;
+    } catch {
+      return null;
+    }
+  };
+  
   const enqArray = axisResponse.decrypted?.Data?.data?.CUR_TXN_ENQ || [];
   const latestStatus = enqArray.find(item => item.crn === crn) || enqArray[0];
   
-  if (!latestStatus) {
-    console.log(`⚠️ No status for CRN: ${crn}`);
-    return null;
-  }
+  if (!latestStatus) return null;
   
   const [result] = await pool.execute(`
     INSERT INTO payout_status_events (
@@ -109,19 +117,19 @@ async function updatePayoutStatus(crn, axisResponse) {
       timestamp = CURRENT_TIMESTAMP
   `, [
     crn,
-    latestStatus.corpCode,                      // "DEMOCORP159"
-    latestStatus.crn,                           // "FTTEST123461"
-    safeNull(latestStatus.utrNo),               // null
-    parseInt(latestStatus.transactionStatus) || 2,  // REJECTED=2
-    safeNull(latestStatus.statusDescription),   // "Debit account does not exist"
-    safeNull(latestStatus.batchNo),             // "46086"
-    safeNull(latestStatus.processingDate),      // "05-01-2026 23:33:01"
-    safeNull(latestStatus.responseCode),        // "F101"
-    safeNull(axisResponse.decrypted?.Data?.data?.checksum),  // "90d42ff8..."
-    JSON.stringify(axisResponse)                // Full JSON
+    latestStatus.corpCode,
+    latestStatus.crn,
+    safeNull(latestStatus.utrNo),
+    parseInt(latestStatus.transactionStatus) || 2,
+    safeNull(latestStatus.statusDescription),
+    safeNull(latestStatus.batchNo),
+    parseProcessingDate(latestStatus.processingDate),  // ✅ '2026-01-05 23:26:17'
+    safeNull(latestStatus.responseCode),
+    safeNull(axisResponse.decrypted?.Data?.data?.checksum),
+    JSON.stringify(axisResponse)
   ]);
   
-  // Update payout_requests
+  // Update main status
   const txnStatus = parseInt(latestStatus.transactionStatus) || 1;
   await pool.execute(`
     UPDATE payout_requests SET 
@@ -130,14 +138,14 @@ async function updatePayoutStatus(crn, axisResponse) {
         WHEN ? = 4 THEN 'return'
         WHEN ? = 2 THEN 'failed'
         ELSE 'processing'
-      END, 
-      updated_at = CURRENT_TIMESTAMP
+      END, updated_at = CURRENT_TIMESTAMP
     WHERE crn = ?
   `, [txnStatus, txnStatus, txnStatus, crn]);
   
-  console.log(`📊 ${crn} → ${latestStatus.transactionStatus} (${latestStatus.responseCode})`);
+  console.log(`📊 ${crn} → ${latestStatus.transactionStatus}`);
   return result;
 }
+
 
 
 async function handleCallback(payload) {
