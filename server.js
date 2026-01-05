@@ -125,7 +125,7 @@ app.get('/balance/:merchantId', async (req, res) => {
     res.json({
       success: true,
       merchantId,
-      axisBalance: result.decrypted?.Data?.data?.balance,
+      axisBalance: result.decrypted?.Data?.data?.Balance,
       appPending: latest?.app_pending_out || 0,
       reconciled: latest?.reconciled || false,
       fetchedAt: latest?.fetched_at,

@@ -132,7 +132,7 @@ async function saveBalanceSnapshot(merchantId, corpAccNum, axisData) {
     corpAccNum,
     config.corpCode,  // From your config
     config.channelId,
-    balanceData.balance || 0,
+    balanceData.Balance || 0,
     pendingRows[0].pending_amount,
     JSON.stringify(axisData)
   ]);
