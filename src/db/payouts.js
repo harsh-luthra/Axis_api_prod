@@ -1,4 +1,6 @@
 const pool = require('./mysql');
+const config = require('../config/axisConfig');
+const crypto = require('crypto');
 
 async function createPayoutTransfer(payload, axisResponse) {
   const [result] = await pool.execute(`
