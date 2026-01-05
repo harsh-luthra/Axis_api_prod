@@ -155,9 +155,9 @@ app.post('/fund-transfer', async (req, res) => {
 
     console.log('💸 Fund Transfer Request:', JSON.stringify(payload, null, 2));
 
-    const result = await fundTransfer(payload, merchantId);
+    const axisResult  = await fundTransfer(payload, merchantId);
 
-    const decrypted = result?.decrypted || {};
+    const decrypted = axisResult ?.decrypted || {};
     const data = decrypted?.Data || {};
 
     /* ===========================
@@ -169,7 +169,7 @@ app.post('/fund-transfer', async (req, res) => {
         axisStatus: data.status,
         axisMessage: data.message || 'Transaction rejected by Axis',
         axisErrors: data.errorDetails || [],
-        raw: result.raw,
+        raw: axisResult .raw,
         decrypted
       });
     }
@@ -178,7 +178,9 @@ app.post('/fund-transfer', async (req, res) => {
        SUCCESS
     =========================== */
 
-    const payoutId = await db.createPayoutTransfer(req.body, result);
+        // ✅ SAVE TO DB (right name!)
+    await db.createFundTransfer(merchantId, payload, axisResult);
+    
     console.log(`💾 Payout saved ID: ${payoutId}`);
 
     return res.status(200).json({
@@ -188,7 +190,7 @@ app.post('/fund-transfer', async (req, res) => {
       crn: payload.custUniqRef,  // Client polls /status with this
       axisRef: data.txnReferenceId || null,
       utr: data.utr || null,
-      raw: result.raw,
+      raw: axisResult .raw,
       decrypted
     });
 

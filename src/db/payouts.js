@@ -32,57 +32,59 @@ const crypto = require('crypto');
 
 async function createFundTransfer(merchantId, ftDetails, axisResponse) {
   const paymentDetails = ftDetails.paymentDetails?.[0] || ftDetails;
-  
-  // ✅ Universal sanitizers (handles '', undefined, null)
   const safeNull = (val) => val === '' || val == null ? null : val;
   const safeNumber = (val) => val === '' || val == null ? null : parseFloat(val);
   
+  // ✅ Map ONLY known fields (37+ safe)
+  const knownFields = {
+    merchant_id: merchantId,
+    crn: safeNull(paymentDetails.custUniqRef),
+    txn_paymode: safeNull(paymentDetails.txnPaymode),
+    txn_type: safeNull(paymentDetails.txnType),
+    txn_amount: safeNumber(paymentDetails.txnAmount),
+    bene_lei: safeNull(paymentDetails.beneLEI),
+    bene_code: safeNull(paymentDetails.beneCode),
+    value_date: safeNull(paymentDetails.valueDate),
+    bene_name: safeNull(paymentDetails.beneName),
+    bene_acc_num: safeNull(paymentDetails.beneAccNum),
+    bene_ac_type: safeNull(paymentDetails.beneAcType),
+    bene_addr1: safeNull(paymentDetails.beneAddr1 || ''),
+    bene_addr2: safeNull(paymentDetails.beneAddr2 || ''),
+    bene_addr3: safeNull(paymentDetails.beneAddr3 || ''),
+    bene_city: safeNull(paymentDetails.beneCity || ''),
+    bene_state: safeNull(paymentDetails.beneState || ''),
+    bene_pincode: safeNull(paymentDetails.benePincode || ''),
+    bene_ifsc_code: safeNull(paymentDetails.beneIfscCode),
+    bene_bank_name: safeNull(paymentDetails.beneBankName),
+    bene_email_addr1: safeNull(paymentDetails.beneEmailAddr1),
+    bene_mobile_no: safeNull(paymentDetails.beneMobileNo),
+    base_code: safeNull(paymentDetails.baseCode),
+    cheque_number: safeNull(paymentDetails.chequeNumber),
+    cheque_date: safeNull(paymentDetails.chequeDate),
+    payable_location: safeNull(paymentDetails.payableLocation),
+    print_location: safeNull(paymentDetails.printLocation),
+    product_code: safeNull(paymentDetails.productCode),
+    sender_to_receiver_info: safeNull(paymentDetails.senderToReceiverInfo),
+    checksum_sent: safeNull(paymentDetails.checksum),
+    axis_response: JSON.stringify(axisResponse),
+    status: axisResponse.decrypted?.Data?.status === 'S' ? 'processing' : 'failed'
+  };
+  
+  // ✅ Dynamic: Build query from keys
+  const columns = Object.keys(knownFields);
+  const placeholders = columns.map(() => '?').join(', ');
+  const values = columns.map(col => knownFields[col]);
+  
   const [result] = await pool.execute(`
-    INSERT INTO payout_requests (
-      merchant_id, crn, txn_paymode, txn_type, txn_amount, bene_lei, bene_code,
-      value_date, bene_name, bene_acc_num, bene_ac_type, bene_addr1, bene_addr2,
-      bene_addr3, bene_city, bene_state, bene_pincode, bene_ifsc_code,
-      bene_bank_name, bene_email_addr1, bene_mobile_no, base_code, cheque_number,
-      cheque_date, payable_location, print_location, product_code,
-      sender_to_receiver_info, checksum_sent, axis_response, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    merchantId,
-    safeNull(paymentDetails.custUniqRef),           // crn
-    safeNull(paymentDetails.txnPaymode),            // txn_paymode
-    safeNull(paymentDetails.txnType),               // txn_type
-    safeNumber(paymentDetails.txnAmount),           // txn_amount ✅
-    safeNull(paymentDetails.beneLEI),               // bene_lei
-    safeNull(paymentDetails.beneCode),              // bene_code
-    safeNull(paymentDetails.valueDate),             // value_date
-    safeNull(paymentDetails.beneName),              // bene_name
-    safeNull(paymentDetails.beneAccNum),            // bene_acc_num
-    safeNull(paymentDetails.beneAcType),            // bene_ac_type
-    safeNull(paymentDetails.beneAddr1),             // bene_addr1
-    safeNull(paymentDetails.beneAddr2),             // bene_addr2
-    safeNull(paymentDetails.beneAddr3),             // bene_addr3
-    safeNull(paymentDetails.beneCity),              // bene_city
-    safeNull(paymentDetails.beneState),             // bene_state
-    safeNull(paymentDetails.benePincode),           // bene_pincode
-    safeNull(paymentDetails.beneIfscCode),          // bene_ifsc_code
-    safeNull(paymentDetails.beneBankName),          // bene_bank_name
-    safeNull(paymentDetails.beneEmailAddr1),        // bene_email_addr1
-    safeNull(paymentDetails.beneMobileNo),          // bene_mobile_no
-    safeNull(paymentDetails.baseCode),              // base_code
-    safeNull(paymentDetails.chequeNumber),          // cheque_number
-    safeNull(paymentDetails.chequeDate),            // cheque_date
-    safeNull(paymentDetails.payableLocation),       // payable_location
-    safeNull(paymentDetails.printLocation),         // print_location
-    safeNull(paymentDetails.productCode),           // product_code
-    safeNull(paymentDetails.senderToReceiverInfo),  // sender_to_receiver_info
-    safeNull(paymentDetails.checksum),              // checksum_sent
-    JSON.stringify(axisResponse),                   // axis_response
-    axisResponse.decrypted?.Data?.status === 'S' ? 'processing' : 'failed'  // status
-  ]);
+    INSERT INTO payout_requests (${columns.join(', ')}) 
+    VALUES (${placeholders})
+  `, values);
   
   console.log(`💾 Transfer saved: ID ${result.insertId}, CRN ${paymentDetails.custUniqRef}`);
   return result.insertId;
 }
+
+
 
 
 async function updatePayoutStatus(crn, statusData) {
