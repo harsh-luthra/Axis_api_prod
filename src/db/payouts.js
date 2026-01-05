@@ -126,7 +126,7 @@ async function updatePayoutStatus(crn, axisResponse) {
     parseProcessingDate(latestStatus.processingDate),  // ✅ '2026-01-05 23:26:17'
     safeNull(latestStatus.responseCode),
     safeNull(axisResponse.decrypted?.Data?.data?.checksum),
-    JSON.stringify(axisResponse)
+    JSON.stringify(axisResponse.decrypted?.Data)
   ]);
   
   // Update main status

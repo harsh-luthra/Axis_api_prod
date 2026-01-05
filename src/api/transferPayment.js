@@ -51,7 +51,6 @@ function validateFundTransfer(ft) {
 
   if (!ft.custUniqRef) errors.push('custUniqRef mandatory');
   if (!ft.txnAmount) errors.push('txnAmount mandatory');
-  if (!ft.corpAccNum) errors.push('corpAccNum mandatory');
   if (!ft.beneCode) errors.push('beneCode mandatory');
   if (!ft.valueDate) errors.push('valueDate mandatory');
   if (!ft.beneName) errors.push('beneName mandatory');
@@ -97,7 +96,7 @@ function validateFundTransfer(ft) {
   =========================== */
 
   checkLen(ft.custUniqRef, 30, 'custUniqRef');
-  checkLen(ft.corpAccNum, 15, 'corpAccNum');
+  checkLen(ft.corpAccNum, 15, config.corpAccNum);
   checkLen(ft.beneCode, 30, 'beneCode');
   checkLen(ft.beneName, 70, 'beneName');
   checkLen(ft.beneAccNum, 30, 'beneAccNum');
@@ -132,7 +131,7 @@ function buildFundTransferData(ft) {
     txnType: ft.txnType || 'CUST',
     txnAmount: ft.txnAmount,
     beneLEI: ft.beneLEI || '',
-    corpAccNum: ft.corpAccNum,
+    corpAccNum: config.corpAccNum,
     beneCode: ft.beneCode,
     valueDate: ft.valueDate || new Date().toISOString().slice(0, 10),
     beneName: ft.beneName,

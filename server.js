@@ -178,11 +178,6 @@ app.post('/fund-transfer', async (req, res) => {
        SUCCESS
     =========================== */
 
-        // ✅ SAVE TO DB (right name!)
-    // await db.createFundTransfer(merchantId, payload, axisResult);
-    
-    // console.log(`💾 Payout saved ID: ${payoutId}`);
-
     return res.status(200).json({
       success: true,
       axisStatus: data.status || 'S',
@@ -270,6 +265,7 @@ app.post('/fund-transfer/status', async (req, res) => {
       utrNo: statusData.utrNo,
       batchNo: statusData.batchNo,
       processingDate: statusData.processingDate,
+      body: data,
       count: statusArray.length
     });
 
