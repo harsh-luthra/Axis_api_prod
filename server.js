@@ -53,7 +53,7 @@ function buildGetBalanceData(corpAccNum) {
 }
 
 // --------- NEW CALLBACK HANDLER ----------
-router.post('/axis/callback', async (req, res) => {
+app.post('/axis/callback', async (req, res) => {
   try {
     const encrypted =
       req.body?.GetStatusResponseBodyEncrypted || req.body;
@@ -115,8 +115,9 @@ router.post('/axis/callback', async (req, res) => {
 // --------- TEST BALANCE ENDPOINT ----------
 app.get('/balance/:merchantId', async (req, res) => {
   try {
-    const merchantId = parseInt(req.params.merchantId);
-    const result = await require('./src/api/getBalance').getBalance(merchantId);
+    const merchantId = parseInt(req.params.merchantId) || 1;  // Default 1
+    // const result = await require('./src/api/getBalance').getBalance(merchantId);
+    const result = await require('./src/api/getBalance').getBalance();
     
     // Latest snapshot
     const latest = await db.getLatestBalance(merchantId);

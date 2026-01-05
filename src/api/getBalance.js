@@ -34,6 +34,7 @@ function buildBalanceData(corpAccNum) {
 }
 
 async function getBalance() {
+  const merchantId = 1;  // For testing, assume merchant ID 1
   const corpAccNum = '309010100067740'
   const url = config.urls[config.env].getBalance;
   const headers = baseHeaders();

@@ -81,27 +81,27 @@ router.post('/axis/callback', async (req, res) => {
 
 
 // --------- CALLBACK (already working) ----------
-app.post('/axis/callback_old', async (req, res) => {
-  try {
-    const cipher = req.body.GetStatusResponseBodyEncrypted || req.body;
-    const decryptedJson = decryptAes256Callback(cipher);
-    const parsed = JSON.parse(decryptedJson);
+// app.post('/axis/callback_old', async (req, res) => {
+//   try {
+//     const cipher = req.body.GetStatusResponseBodyEncrypted || req.body;
+//     const decryptedJson = decryptAes256Callback(cipher);
+//     const parsed = JSON.parse(decryptedJson);
 
-    const data = parsed.data || parsed.Data || parsed;
-    const isValidChecksum = verifyChecksumAxis(data);
+//     const data = parsed.data || parsed.Data || parsed;
+//     const isValidChecksum = verifyChecksumAxis(data);
 
-    if (!isValidChecksum) {
-      console.error('Invalid checksum in callback');
-      return res.status(400).send('Checksum verification failed');
-    }
+//     if (!isValidChecksum) {
+//       console.error('Invalid checksum in callback');
+//       return res.status(400).send('Checksum verification failed');
+//     }
 
-    console.log('Callback data:', data);
-    res.status(200).send('OK');
-  } catch (err) {
-    console.error('Callback error', err);
-    res.status(500).send('ERROR');
-  }
-});
+//     console.log('Callback data:', data);
+//     res.status(200).send('OK');
+//   } catch (err) {
+//     console.error('Callback error', err);
+//     res.status(500).send('ERROR');
+//   }
+// });
 
 
 
