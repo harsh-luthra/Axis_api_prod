@@ -85,37 +85,44 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
 }
 
 
-async function updatePayoutStatus(crn, statusData) {
+async function updatePayoutStatus(crn, axisResponse) {
   const safeNull = (val) => val === '' || val == null ? null : val;
   
-  // ✅ 11 columns EXACT match
+  // ✅ Handle ARRAY (CUR_TXN_ENQ)
+  const enqArray = axisResponse.decrypted?.Data?.data?.CUR_TXN_ENQ || [];
+  const latestStatus = enqArray.find(item => item.crn === crn) || enqArray[0];
+  
+  if (!latestStatus) {
+    console.log(`⚠️ No status for CRN: ${crn}`);
+    return null;
+  }
+  
   const [result] = await pool.execute(`
     INSERT INTO payout_status_events (
       payout_id, corp_code, crn, utr_no, transaction_status, 
       status_description, batch_no, processing_date, respone_code, 
       checksum_received, raw_response
     ) VALUES (
-      (SELECT id FROM payout_requests WHERE crn = ?), 
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      (SELECT id FROM payout_requests WHERE crn = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     ) ON DUPLICATE KEY UPDATE 
       raw_response = VALUES(raw_response),
       timestamp = CURRENT_TIMESTAMP
   `, [
-    crn,                                    // payout_id subquery
-    config.corpCode,                        // corp_code ✅
-    crn,                                    // crn
-    safeNull(statusData.utrNo),             // utr_no
-    parseInt(statusData.transactionStatus) || 1,  // transaction_status tinyint
-    safeNull(statusData.statusDescription), // status_description
-    safeNull(statusData.batchNo),           // batch_no
-    safeNull(statusData.processingDate),    // processing_date
-    safeNull(statusData.responeCode),       // respone_code
-    safeNull(statusData.checksum),          // checksum_received ✅
-    JSON.stringify(statusData)              // raw_response
+    crn,
+    latestStatus.corpCode,                      // "DEMOCORP159"
+    latestStatus.crn,                           // "FTTEST123461"
+    safeNull(latestStatus.utrNo),               // null
+    parseInt(latestStatus.transactionStatus) || 2,  // REJECTED=2
+    safeNull(latestStatus.statusDescription),   // "Debit account does not exist"
+    safeNull(latestStatus.batchNo),             // "46086"
+    safeNull(latestStatus.processingDate),      // "05-01-2026 23:33:01"
+    safeNull(latestStatus.responseCode),        // "F101"
+    safeNull(axisResponse.decrypted?.Data?.data?.checksum),  // "90d42ff8..."
+    JSON.stringify(axisResponse)                // Full JSON
   ]);
   
-  // Update main payout status
-  const txnStatus = parseInt(statusData.transactionStatus) || 1;
+  // Update payout_requests
+  const txnStatus = parseInt(latestStatus.transactionStatus) || 1;
   await pool.execute(`
     UPDATE payout_requests SET 
       status = CASE 
@@ -128,7 +135,7 @@ async function updatePayoutStatus(crn, statusData) {
     WHERE crn = ?
   `, [txnStatus, txnStatus, txnStatus, crn]);
   
-  console.log(`📊 Status saved: ${crn} → ${statusData.transactionStatus}`);
+  console.log(`📊 ${crn} → ${latestStatus.transactionStatus} (${latestStatus.responseCode})`);
   return result;
 }
 

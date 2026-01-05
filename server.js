@@ -233,46 +233,50 @@ app.post('/fund-transfer', async (req, res) => {
 
 app.post('/fund-transfer/status', async (req, res) => {
   try {
-    console.log('📡 Get Transfer Status Request:', req.body);
-
+    console.log('📡 Status Request:', req.body);
+    
+    if (!req.body.crn) {
+      return res.status(400).json({ success: false, error: 'crn required' });
+    }
+    
     const result = await getTransferStatus(req.body);
-    console.log('📡 Get Transfer Status Result:', JSON.stringify(result, null, 2));
+    console.log('📡 Status Result:', JSON.stringify(result.decrypted, null, 2));
+    
     const decrypted = result?.decrypted || {};
     const data = decrypted?.Data || {};
 
-    /* ===========================
-       AXIS BUSINESS FAILURE
-    =========================== */
-    if (data.status && data.status !== 'S') {
+    // AXIS FAILURE
+    if (data.status !== 'S') {
       return res.status(422).json({
         success: false,
         axisStatus: data.status,
-        axisMessage: data.message || 'Axis rejected status enquiry',
+        axisMessage: data.message,
         decrypted
       });
     }
 
-    /* ===========================
-       SUCCESS
-    =========================== */
-
-    const statusData = data.data?.CURTXNENQ?.[0] || {};
-    await db.updatePayoutStatus(req.body.crn, statusData);
+    // SUCCESS - ARRAY handling
+    const statusArray = data.data?.CUR_TXN_ENQ || [];
+    const statusData = statusArray.find(item => item.crn === req.body.crn) || statusArray[0] || {};
+    
+    await db.updatePayoutStatus(req.body.crn, result);
 
     res.status(200).json({
       success: true,
-      axisStatus: data.status,
-      axisMessage: data.message,
-      txnStatus: data.txnStatus || null,
-      utr: data.utr || null,
-      txnReferenceId: data.txnReferenceId || null,
-      decrypted,
-      raw: result.raw
+      crn: req.body.crn,
+      status: statusData.transactionStatus,
+      statusDescription: statusData.statusDescription,
+      responseCode: statusData.responseCode,
+      utrNo: statusData.utrNo,
+      batchNo: statusData.batchNo,
+      processingDate: statusData.processingDate,
+      count: statusArray.length
     });
 
   } catch (error) {
-    console.error('❌ Get Status Error:', error);
+    console.error('❌ Status Error:', error);
 
+    // ✅ YOUR ERROR HANDLERS
     if (error.message?.startsWith('Axis Status Validation Failed')) {
       return res.status(400).json({
         success: false,
@@ -296,7 +300,6 @@ app.post('/fund-transfer/status', async (req, res) => {
     });
   }
 });
-
 
 // Get Balance
 app.get('/test-balance', async (req, res) => {
