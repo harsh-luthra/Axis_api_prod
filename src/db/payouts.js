@@ -88,7 +88,6 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
 async function updatePayoutStatus(crn, axisResponse) {
   const safeNull = (val) => val === '' || val == null ? null : val;
   
-  // ✅ Fix DD-MM-YYYY → YYYY-MM-DD
   const parseProcessingDate = (dateStr) => {
     if (!dateStr) return null;
     try {
@@ -100,10 +99,23 @@ async function updatePayoutStatus(crn, axisResponse) {
     }
   };
   
+  // ✅ String → Tinyint (PDF spec[file:190])
+  const mapStatusToInt = (statusStr) => {
+    const map = {
+      'PENDING': 1,
+      'REJECTED': 2,
+      'PROCESSED': 3,
+      'Return': 4
+    };
+    return map[statusStr] || 1;
+  };
+  
   const enqArray = axisResponse.decrypted?.Data?.data?.CUR_TXN_ENQ || [];
   const latestStatus = enqArray.find(item => item.crn === crn) || enqArray[0];
   
   if (!latestStatus) return null;
+  
+  const txnStatusInt = mapStatusToInt(latestStatus.transactionStatus);
   
   const [result] = await pool.execute(`
     INSERT INTO payout_status_events (
@@ -120,17 +132,16 @@ async function updatePayoutStatus(crn, axisResponse) {
     latestStatus.corpCode,
     latestStatus.crn,
     safeNull(latestStatus.utrNo),
-    parseInt(latestStatus.transactionStatus) || 2,
+    txnStatusInt,                          // ✅ 2 = "REJECTED"
     safeNull(latestStatus.statusDescription),
     safeNull(latestStatus.batchNo),
-    parseProcessingDate(latestStatus.processingDate),  // ✅ '2026-01-05 23:26:17'
+    parseProcessingDate(latestStatus.processingDate),
     safeNull(latestStatus.responseCode),
     safeNull(axisResponse.decrypted?.Data?.data?.checksum),
     JSON.stringify(axisResponse.decrypted?.Data)
   ]);
   
-  // Update main status
-  const txnStatus = parseInt(latestStatus.transactionStatus) || 1;
+  // Update main payout
   await pool.execute(`
     UPDATE payout_requests SET 
       status = CASE 
@@ -140,12 +151,11 @@ async function updatePayoutStatus(crn, axisResponse) {
         ELSE 'processing'
       END, updated_at = CURRENT_TIMESTAMP
     WHERE crn = ?
-  `, [txnStatus, txnStatus, txnStatus, crn]);
+  `, [txnStatusInt, txnStatusInt, txnStatusInt, crn]);
   
-  console.log(`📊 ${crn} → ${latestStatus.transactionStatus}`);
+  console.log(`📊 ${crn} → ${latestStatus.transactionStatus} (${txnStatusInt})`);
   return result;
 }
-
 
 
 async function handleCallback(payload) {
