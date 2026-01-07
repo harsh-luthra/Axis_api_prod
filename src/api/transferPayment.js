@@ -197,11 +197,18 @@ function buildFundTransferData(ft) {
 async function fundTransfer(ftDetails, merchantId) {  // ✅ Add merchantId param
   const url = config.urls[config.env].transferPayment;
   const headers = baseHeaders();
+  
+  // Check if transaction with custUniqRef already exists
+  if (await db.checkFundTransferExists(ftDetails.custUniqRef)) {
+    throw new Error(`Transaction with custUniqRef ${ftDetails.custUniqRef} already exists`);
+  }
+  
   const body = buildFundTransferData(ftDetails);
   
   console.log('🔍 TransferPayment Data:', JSON.stringify(body.Data, null, 2));
   
   const encryptedAndSigned = await jweEncryptAndSign(body);
+
   const response = await axisRequest({ url, method: 'POST', headers, data: encryptedAndSigned });
   const decrypted = await jweVerifyAndDecrypt(response.data);
   

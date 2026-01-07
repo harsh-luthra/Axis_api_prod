@@ -146,7 +146,6 @@ app.get('/balance/:merchantId', async (req, res) => {
   }
 });
 
-
 // /test-transfer-payment
 app.post('/fund-transfer', async (req, res) => {
   try {

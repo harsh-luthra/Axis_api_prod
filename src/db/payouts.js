@@ -234,6 +234,11 @@ async function saveBalanceSnapshot(merchantId, corpAccNum, axisData) {
   console.log(`💾 Balance snapshot saved for merchant ${merchantId}`);
 }
 
+async function checkFundTransferExists(custUniqRef) {
+  const [rows] = await pool.execute('SELECT id FROM payout_requests WHERE crn = ?', [custUniqRef]);
+  return rows.length > 0;
+}
+
 async function getLatestBalance(merchantId) {
   const [rows] = await pool.execute(`
     SELECT * FROM balance_snapshots 
@@ -249,5 +254,6 @@ module.exports = {
   handleCallback,
   saveBalanceSnapshot,
   getLatestBalance,
-  getMerchantBalance
+  getMerchantBalance,
+  checkFundTransferExists
 };
