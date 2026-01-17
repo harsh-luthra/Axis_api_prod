@@ -35,7 +35,7 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
   const safeNull = (val) => val === '' || val == null ? null : val;
   const safeNumber = (val) => val === '' || val == null ? null : parseFloat(val);
   
-  // ✅ Map ONLY known fields (37+ safe)
+  // ? Map ONLY known fields (37+ safe)
   const knownFields = {
     merchant_id: merchantId,
     crn: safeNull(paymentDetails.custUniqRef),
@@ -70,7 +70,7 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
     status: axisResponse.decrypted?.Data?.status === 'S' ? 'processing' : 'failed'
   };
   
-  // ✅ Dynamic: Build query from keys
+  // ? Dynamic: Build query from keys
   const columns = Object.keys(knownFields);
   const placeholders = columns.map(() => '?').join(', ');
   const values = columns.map(col => knownFields[col]);
@@ -80,7 +80,7 @@ async function createFundTransfer(merchantId, ftDetails, axisResponse) {
     VALUES (${placeholders})
   `, values);
   
-  console.log(`💾 Transfer saved: ID ${result.insertId}, CRN ${paymentDetails.custUniqRef}`);
+  console.log(`? Transfer saved: ID ${result.insertId}, CRN ${paymentDetails.custUniqRef}`);
   return result.insertId;
 }
 
@@ -99,7 +99,7 @@ async function updatePayoutStatus(crn, axisResponse) {
     }
   };
   
-  // ✅ String → Tinyint (PDF spec[file:190])
+  // ? String ? Tinyint (PDF spec[file:190])
   const mapStatusToInt = (statusStr) => {
     const map = {
       'PENDING': 1,
@@ -132,7 +132,7 @@ async function updatePayoutStatus(crn, axisResponse) {
     latestStatus.corpCode,
     latestStatus.crn,
     safeNull(latestStatus.utrNo),
-    txnStatusInt,                          // ✅ 2 = "REJECTED"
+    txnStatusInt,                          // ? 2 = "REJECTED"
     safeNull(latestStatus.statusDescription),
     safeNull(latestStatus.batchNo),
     parseProcessingDate(latestStatus.processingDate),
@@ -142,18 +142,21 @@ async function updatePayoutStatus(crn, axisResponse) {
   ]);
   
   // Update main payout
-  await pool.execute(`
-    UPDATE payout_requests SET 
-      status = CASE 
-        WHEN ? = 3 THEN 'processed'
-        WHEN ? = 4 THEN 'return'
-        WHEN ? = 2 THEN 'rejected'
-        ELSE 'pending'
-      END, updated_at = CURRENT_TIMESTAMP
-    WHERE crn = ?
-  `, [txnStatusInt, txnStatusInt, txnStatusInt, crn]);
-  
-  console.log(`📊 ${crn} → ${latestStatus.transactionStatus} (${txnStatusInt})`);
+// ? FIXED - No comments inside SQL
+await pool.execute(`
+  UPDATE payout_requests SET 
+    status = CASE 
+      WHEN ? = 3 THEN 'processed'
+      WHEN ? = 4 THEN 'return'
+      WHEN ? = 2 THEN 'reject'
+      ELSE 'pending'
+    END, 
+    updated_at = CURRENT_TIMESTAMP
+  WHERE crn = ?
+`, [txnStatusInt, txnStatusInt, txnStatusInt, crn]);
+
+
+  console.log(`? ${crn} ? ${latestStatus.transactionStatus} (${txnStatusInt})`);
   return result;
 }
 
@@ -166,7 +169,7 @@ async function handleCallback(payload) {
   );
   
   if (payouts.length === 0) {
-    console.log('⚠️ Callback orphan:', payload.crn);
+    console.log('?? Callback orphan:', payload.crn);
     return;
   }
   
@@ -231,7 +234,7 @@ async function saveBalanceSnapshot(merchantId, corpAccNum, axisData) {
     JSON.stringify(axisData)
   ]);
   
-  console.log(`💾 Balance snapshot saved for merchant ${merchantId}`);
+  console.log(`? Balance snapshot saved for merchant ${merchantId}`);
 }
 
 async function checkFundTransferExists(custUniqRef) {

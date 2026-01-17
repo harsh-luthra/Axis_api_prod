@@ -5,17 +5,17 @@ module.exports = {
 
   urls: {
     UAT: {
-      getBalance:      'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-balance',
-      beneReg:         'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payee-mgmt/beneficiary-registration', // POST
-      beneEnquiry:     'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payee-mgmt/beneficiary-enquiry', // POST
-      transferPayment: 'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment',
-      transferStatus:  'https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-status',
+      getBalance:      'https://sakshamuat.axis.bank.in/gateway/api/txb/v3/acct-recon/get-balance',
+      beneReg:         'https://sakshamuat.axis.bank.in/gateway/api/txb/v3/payee-mgmt/beneficiary-registration', // POST
+      beneEnquiry:     'https://sakshamuat.axis.bank.in/gateway/api/txb/v3/payee-mgmt/beneficiary-enquiry', // POST
+      transferPayment: 'https://sakshamuat.axis.bank.in/gateway/api/txb/v3/payments/transfer-payment',
+      transferStatus:  'https://sakshamuat.axis.bank.in/gateway/api/txb/v3/acct-recon/get-status',
     },
 
     PROD: {
-      transferPayment: 'https://saksham.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment',
-      transferStatus:       'https://saksham.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-status',
-      getBalance:      'https://saksham.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-balance'
+      transferPayment: 'https://saksham.axis.bank.in/gateway/api/txb/v3/payments/transfer-payment',
+      transferStatus:  'https://saksham.axis.bank.in/gateway/api/txb/v3/acct-recon/get-status',
+      getBalance:      'https://saksham.axis.bank.in/gateway/api/txb/v3/acct-recon/get-balance'
     }
   },
 

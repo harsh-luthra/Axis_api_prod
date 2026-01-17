@@ -24,10 +24,10 @@ function baseHeaders() {
 function validateStatusRequest(req) {
   const errors = [];
 
-  // ✅ CRN mandatory (PDF spec[file:190])
+  // ✅ CRN mandatory
   if (!req.crn) errors.push('crn mandatory');
   if (typeof req.crn !== 'string') errors.push('crn must be string');
-  if (req.crn?.length > 15) errors.push('crn max length 15');  // varchar(15)
+  if (req.crn?.length > 30) errors.push('crn max length 30');  // varchar(30)
 
   if (errors.length) {
     throw new Error(`Axis Status Validation Failed: ${errors.join(' | ')}`);
