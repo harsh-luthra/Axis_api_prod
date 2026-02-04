@@ -19,15 +19,33 @@ const IV = Buffer.from([
 ]);
 
 function decryptCallback(cipherTextB64) {
-  const key = Buffer.from(KEY_HEX, 'hex'); // 16‑byte AES‑128 key
+  const key = Buffer.from(KEY_HEX, 'hex');
   const cipherBytes = Buffer.from(cipherTextB64, 'base64');
 
   const decipher = crypto.createDecipheriv('aes-128-cbc', key, IV);
-  decipher.setAutoPadding(true); // PKCS5/PKCS7
+  decipher.setAutoPadding(true);
 
-  let decrypted = decipher.update(cipherBytes, undefined, 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
+  // BINARY decrypt to Buffer first
+  const decryptedBuf = Buffer.concat([
+    decipher.update(cipherBytes),
+    decipher.final()
+  ]);
+
+  // Find first valid UTF8 JSON start (skip garbage bytes)
+  let jsonStart = 0;
+  for (let i = 0; i < decryptedBuf.length - 1; i++) {
+    if (decryptedBuf[i] === 0x7B) { // '{'
+      jsonStart = i;
+      break;
+    }
+  }
+
+  const jsonBytes = decryptedBuf.slice(jsonStart);
+  const jsonStr = jsonBytes.toString('utf8');
+
+  // Validate JSON
+  const parsed = JSON.parse(jsonStr);
+  return parsed;
 }
 
 // Optional: local test to match their sample encrypt/decrypt
