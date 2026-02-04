@@ -66,7 +66,7 @@ app.post('/axis/callback', async (req, res) => {
       return res.status(200).send('OK'); // do NOT fail callback
     }
 
-    console.log("Encrypted: ",encrypted);
+    console.log('Encrypted: ', encrypted);
 
     const decryptedJson = decryptAxisCallbackHex(encrypted);
     const parsed = JSON.parse(decryptedJson);
