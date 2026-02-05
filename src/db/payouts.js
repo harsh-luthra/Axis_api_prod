@@ -162,14 +162,16 @@ await pool.execute(`
 
 
 async function handleCallback(payload) {
+  console.log('🔍 DB payload:', payload); // DEBUG
+
   // Match by crn/transaction_id
   const [payouts] = await pool.execute(
     'SELECT id FROM payout_requests WHERE crn = ? OR transaction_id = ?',
-    [payload.crn, payload.transactionid]
+    [payload.crn, payload.transactionId || payload.transactionid] // Both cases
   );
   
   if (payouts.length === 0) {
-    console.log('?? Callback orphan:', payload.crn);
+    console.log('❌ Orphan callback:', payload.crn);
     return;
   }
   
@@ -181,16 +183,19 @@ async function handleCallback(payload) {
   `, [
     payouts[0].id,
     payload.crn,
-    payload.transactionid,
-    payload.utrNo,
-    payload.transactionStatus,
-    payload.statusDescription,
+    payload.transactionId || payload.transactionid,  // Fix undefined
+    payload.utr || payload.utrNo,                    // Both cases
+    payload.status,
+    payload.statusDesc || payload.statusDescription,
     payload.responseCode,
     payload.batchNo,
     payload.amount,
     JSON.stringify(payload)
   ]);
+  
+  console.log('✅ Callback saved:', payload.crn);
 }
+
 
 // Using
 async function getMerchantBalance(merchantId) {

@@ -94,12 +94,13 @@ app.post('/axis/callback', async (req, res) => {
 
     const txnUpdate = {
       crn: record.crn,
-      transactionId: record.transaction_id,
-      utr: record.utrNo,
-      status: record.transactionStatus,
-      statusDesc: record.statusDescription,
-      amount: record.amount,
-      processedAt: record.processingDate
+      transactionId: record.transaction_id,     // Snake → camel
+      utrNo: record.utrNo,
+      transactionStatus: record.transactionStatus,
+      statusDescription: record.statusDescription,
+      responseCode: record.responseCode,
+      batchNo: record.batchNo,
+      amount: record.amount
     };
 
     console.log('✅ Processing:', txnUpdate);
