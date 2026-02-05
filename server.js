@@ -92,16 +92,18 @@ app.post('/axis/callback', async (req, res) => {
       return res.status(200).send('OK');
     }
 
+    // In server.js route:
     const txnUpdate = {
       crn: record.crn,
-      transactionId: record.transaction_id,     // Snake → camel
+      transactionId: record.transaction_id,
       utrNo: record.utrNo,
-      transactionStatus: record.transactionStatus,
+      transactionStatus: record.transactionStatus,  // ← Send this
       statusDescription: record.statusDescription,
       responseCode: record.responseCode,
       batchNo: record.batchNo,
       amount: record.amount
     };
+
 
     console.log('✅ Processing:', txnUpdate);
 

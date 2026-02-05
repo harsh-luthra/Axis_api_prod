@@ -162,16 +162,15 @@ await pool.execute(`
 
 
 async function handleCallback(payload) {
-  console.log('🔍 DB payload:', payload); // DEBUG
+  console.log('🔍 DB payload:', payload);
 
-  // Match by crn/transaction_id
   const [payouts] = await pool.execute(
     'SELECT id FROM payout_requests WHERE crn = ? OR transaction_id = ?',
-    [payload.crn, payload.transactionId || payload.transactionid] // Both cases
+    [payload.crn?.trim(), payload.transactionId]
   );
   
   if (payouts.length === 0) {
-    console.log('❌ Orphan callback:', payload.crn);
+    console.log('❌ Orphan:', payload.crn);
     return;
   }
   
@@ -182,19 +181,20 @@ async function handleCallback(payload) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     payouts[0].id,
-    payload.crn,
-    payload.transactionId || payload.transactionid,  // Fix undefined
-    payload.utr || payload.utrNo,                    // Both cases
-    payload.status,
-    payload.statusDesc || payload.statusDescription,
-    payload.responseCode,
-    payload.batchNo,
+    payload.crn?.trim(),
+    payload.transactionId,
+    payload.utrNo,
+    payload.transactionStatus || payload.status,        // ✅ Fallback
+    payload.statusDescription,
+    payload.responseCode || null,                      // ✅ Explicit NULL
+    payload.batchNo || null,
     payload.amount,
     JSON.stringify(payload)
   ]);
   
-  console.log('✅ Callback saved:', payload.crn);
+  console.log('✅ Saved:', payload.crn);
 }
+
 
 
 // Using
