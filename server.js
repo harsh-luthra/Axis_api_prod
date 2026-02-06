@@ -22,10 +22,24 @@ const { getTransferStatus } = require('./src/api/getTransferStatus');
 
 const db = require('./src/db/payouts');
 
+// 2. Add proper logging middleware
+const logger = require('winston');  // or pino
+
 const app = express();
 
-app.use(bodyParser.json());
-app.use(bodyParser.text({ type: '*/*' }));
+// app.use(bodyParser.json());
+// app.use(bodyParser.text({ type: '*/*' }));
+
+app.use(express.json());
+
+// 3. Add auth middleware
+// app.use(async (req, res, next) => {
+//   const apiKey = req.headers['x-api-key'];
+//   if (!apiKey) return res.status(401).json({ error: 'Unauthorized' });
+//   // Verify API key & set req.merchant
+//   next();
+// });
+
 
 // --------- HELPERS FOR GET BALANCE ----------
 function buildHeaders() {
@@ -378,7 +392,17 @@ function handleAxisError(err, res) {
   });
 }
 
-const PORT = 3000;
+
+
+// 4. Add error handler middleware
+app.use((err, req, res, next) => {
+  logger.error(err);
+  res.status(500).json({ success: false, error: 'Internal Server Error' });
+});
+
+// 5. Use environment variables
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   console.log(`Axis integration test server listening on port ${PORT}`);
 });

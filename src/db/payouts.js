@@ -193,6 +193,30 @@ async function handleCallback(payload) {
   ]);
   
   console.log('✅ Saved:', payload.crn);
+  
+  // Update payout status from callback
+  const axisResponse = {
+    decrypted: {
+      Data: {
+        data: {
+          CUR_TXN_ENQ: [{
+            crn: payload.crn?.trim(),
+            transactionStatus: payload.transactionStatus || payload.status,
+            statusDescription: payload.statusDescription,
+            utrNo: payload.utrNo,
+            batchNo: payload.batchNo,
+            responseCode: payload.responseCode,
+            corpCode: payload.corpCode,
+            processingDate: payload.processingDate,
+            checksum: payload.checksum
+          }],
+          checksum: payload.checksum
+        }
+      }
+    }
+  };
+  
+  await updatePayoutStatus(payload.crn?.trim(), axisResponse);
 }
 
 
