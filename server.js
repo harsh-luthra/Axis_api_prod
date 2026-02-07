@@ -5,7 +5,7 @@ const { verifyChecksumAxis } = require('./src/security/checksumAxis');
 const { decryptAes256Callback } = require('./src/security/aesCallback');
 const { decryptCallback } = require('./src/security/axisAes128');
 // const { decryptHexAes128Ecb } = require('./src/security/axisAes128Ecb');
-
+const pool = require('./mysql');
 
 // NEW: imports for get balance
 const { v4: uuidv4 } = require('uuid');
