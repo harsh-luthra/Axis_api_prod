@@ -57,7 +57,11 @@ async function getMerchantByApiKey(apiKey) {
 
 // Enhanced middleware
 app.use(async (req, res, next) => {
-  if (req.path.startsWith('/admin')) return next();
+  console.log(`➡️ ${req.method} ${req.path} from ${req.ip}`);
+  if (req.path.startsWith('/api/admin/')){
+    console.log('🔒 Admin access, skipping API key auth');
+    return next();
+  } 
 
   const apiKey = req.headers['x-api-key'];
   if (!apiKey) return res.status(401).json({ error: 'X-API-Key required' });
@@ -100,12 +104,12 @@ function buildGetBalanceData(corpAccNum) {
   return { Data: data };
 }
 
-app.post('/admin/generate-api-key', async (req, res) => {
+app.post('/api/admin/generate-api-key', async (req, res) => {
   try {
     const masterKey = req.headers['x-master-key'];
     console.log('🔑 Master key check:', !!masterKey); // DEBUG
     
-    if (masterKey !== process.env.MASTER_API_KEY) {
+    if (masterKey !== config.MASTER_API_KEY) {
       console.log('❌ Invalid master key');
       return res.status(403).json({ error: 'Invalid master key' });
     }
@@ -155,7 +159,7 @@ app.post('/admin/generate-api-key', async (req, res) => {
 
 
 // GET /admin/merchants (Master Key)
-app.get('/admin/merchants', async (req, res) => {
+app.get('/api/admin/merchants', async (req, res) => {
   if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -170,7 +174,7 @@ app.get('/admin/merchants', async (req, res) => {
 });
 
 // POST /admin/revoke-key/{merchantId}
-app.post('/admin/revoke-key/:id', async (req, res) => {
+app.post('/api/admin/revoke-key/:id', async (req, res) => {
   if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }

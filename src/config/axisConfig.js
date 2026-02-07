@@ -31,7 +31,7 @@ module.exports = {
   corpCode: 'DEMOCORP159',
   corpAccNum: '309010100067740',
 
-  MASTER_API_KEY: 'your_master_key_here',
+  MASTER_API_KEY: '0123456789abcdef0123456789abcdef', // example from doc[file:7]
 
   // JWE/JWS crypto
   jwe: {
