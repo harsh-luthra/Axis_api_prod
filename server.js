@@ -58,7 +58,7 @@ async function getMerchantByApiKey(apiKey) {
 // Enhanced middleware
 app.use(async (req, res, next) => {
   console.log(`➡️ ${req.method} ${req.path} from ${req.ip}`);
-  if (req.path.startsWith('/api/admin/')){
+  if (req.path.startsWith('/admin/')){
     console.log('🔒 Admin access, skipping API key auth');
     return next();
   } 
