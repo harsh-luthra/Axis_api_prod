@@ -31,6 +31,8 @@ module.exports = {
   corpCode: 'DEMOCORP159',
   corpAccNum: '309010100067740',
 
+  MASTER_API_KEY: 'your_master_key_here',
+
   // JWE/JWS crypto
   jwe: {
     // Axis public cert for JWE encryption + JWS verification (.cer/.pem)

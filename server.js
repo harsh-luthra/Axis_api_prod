@@ -32,13 +32,41 @@ const app = express();
 
 app.use(express.json());
 
-// 3. Add auth middleware
-// app.use(async (req, res, next) => {
-//   const apiKey = req.headers['x-api-key'];
-//   if (!apiKey) return res.status(401).json({ error: 'Unauthorized' });
-//   // Verify API key & set req.merchant
-//   next();
-// });
+// Generate secure random API key
+function generateApiKey() {
+  return crypto.randomBytes(32).toString('hex'); // 64 chars
+}
+
+// Get merchant by API key (cached)
+const merchantCache = new Map();
+async function getMerchantByApiKey(apiKey) {
+  if (merchantCache.has(apiKey)) return merchantCache.get(apiKey);
+  
+  const [merchants] = await pool.execute(
+    'SELECT * FROM merchants WHERE api_key = ? AND is_active = TRUE',
+    [apiKey]
+  );
+  
+  if (merchants[0]) {
+    merchantCache.set(apiKey, merchants[0]);
+    setTimeout(() => merchantCache.delete(apiKey), 5 * 60 * 1000); // 5min cache
+  }
+  return merchants[0];
+}
+
+// Enhanced middleware
+app.use(async (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey) return res.status(401).json({ error: 'X-API-Key required' });
+
+  const merchant = await getMerchantByApiKey(apiKey);
+  if (!merchant) return res.status(401).json({ error: 'Invalid API key' });
+
+  req.merchant = merchant;  // { id, merchant_name, corp_code, vendor_code, ... }
+  console.log(`✅ Auth: ${merchant.merchant_name} (${apiKey.slice(0,8)}...)`);
+  
+  next();
+});
 
 
 // --------- HELPERS FOR GET BALANCE ----------
@@ -68,6 +96,84 @@ function buildGetBalanceData(corpAccNum) {
 
   return { Data: data };
 }
+
+app.post('/admin/generate-api-key', async (req, res) => {
+  const masterKey = req.headers['x-master-key'];
+  if (masterKey !== config.MASTER_API_KEY) {
+    return res.status(403).json({ error: 'Invalid master key' });
+  }
+
+  const { merchant_name, corp_code, vendor_code, corporate_account } = req.body;
+  
+  if (!merchant_name) {
+    return res.status(400).json({ error: 'merchant_name required' });
+  }
+
+  try {
+    // Create merchant
+    const [result] = await pool.execute(`
+      INSERT INTO merchants (api_key, merchant_name, corp_code, vendor_code, corporate_account)
+      VALUES (?, ?, ?, ?, ?)
+    `, [
+      generateApiKey(),  // Random 64-char key
+      merchant_name,
+      corp_code || null,
+      vendor_code || null,
+      corporate_account || null
+    ]);
+
+    const merchantId = result.insertId;
+    const newApiKey = await getMerchantApiKey(merchantId);
+
+    // Audit trail
+    await pool.execute(`
+      INSERT INTO api_keys (merchant_id, new_key, generated_by, reason)
+      VALUES (?, ?, ?, ?)
+    `, [merchantId, newApiKey, req.ip, 'New merchant onboarding']);
+
+    res.json({
+      success: true,
+      merchant_id: merchantId,
+      api_key: newApiKey,
+      merchant_name
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate key' });
+  }
+});
+
+// GET /admin/merchants (Master Key)
+app.get('/admin/merchants', async (req, res) => {
+  if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  const [merchants] = await pool.execute(`
+    SELECT id, merchant_name, corp_code, vendor_code, 
+           api_key as masked_key, is_active, created_at
+    FROM merchants ORDER BY created_at DESC
+  `);
+  
+  res.json(merchants);
+});
+
+// POST /admin/revoke-key/{merchantId}
+app.post('/admin/revoke-key/:id', async (req, res) => {
+  if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  const merchantId = req.params.id;
+  const newKey = generateApiKey();
+  
+  await pool.execute(
+    'UPDATE merchants SET api_key = ?, is_active = FALSE WHERE id = ?',
+    [newKey, merchantId]
+  );
+  
+  res.json({ revoked: true, new_key: newKey });
+});
+
 
 // --------- NEW CALLBACK HANDLER ----------
 app.post('/axis/callback', async (req, res) => {
