@@ -598,7 +598,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 const server = app.listen(PORT, () => {
-  console.log(`Axis API server listening on port ${PORT} [${process.env.AXIS_ENV || 'UAT'}]`);
+  console.log(`Axis API server VS listening on port ${PORT} [${process.env.AXIS_ENV || 'UAT'}]`);
 });
 
 // Graceful shutdown
