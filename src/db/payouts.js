@@ -318,7 +318,7 @@ async function getLatestBalance(merchantId) {
 }
 
 // ============================================================================
-// Cursor-paginated payout fetcher
+// Cursor-paginated payout fetcher (FULL FIXED VERSION)
 // ============================================================================
 /**
  * Fetch payout_requests with cursor pagination.
@@ -350,46 +350,56 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     }
   }
 
-  // Select fields based on mode (only use fields that definitely exist)
+  // ✅ FIXED: Select fields based on mode
   let selectClause;
   if (mode === 'half') {
-    selectClause = `id, crn, txn_amount, bene_name, status, created_at, updated_at`;
+    selectClause = `pr.id, pr.crn, pr.txn_amount, pr.bene_name, pr.status, pr.created_at, pr.updated_at`;
   } else {
-    selectClause = `id, merchant_id, crn, txn_paymode, txn_type, txn_amount,
-      bene_code, bene_name, bene_acc_num, bene_ifsc_code,
-      bene_bank_name, corp_acc_num, value_date, status, created_at, updated_at`;
+    selectClause = `pr.id, pr.merchant_id, pr.crn, pr.txn_paymode, pr.txn_type, pr.txn_amount,
+      pr.bene_code, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code,
+      pr.bene_bank_name, pr.corp_acc_num, pr.value_date, pr.status, pr.created_at, pr.updated_at`;
   }
 
-  // Build WHERE clause with parameters
+  // ✅ FIXED: Build WHERE clause with parameters correctly
   let whereParts = [];
-  let queryParams = [];
+  let whereParams = [];
 
   if (merchantId) {
-    whereParts.push('merchant_id = ?');
-    queryParams.push(merchantId);
+    whereParts.push('pr.merchant_id = ?');
+    whereParams.push(merchantId);
   }
 
   if (cursorId !== null) {
     if (direction === 'DESC') {
-      whereParts.push('id < ?');
+      whereParts.push('pr.id < ?');
     } else {
-      whereParts.push('id > ?');
+      whereParts.push('pr.id > ?');
     }
-    queryParams.push(cursorId);
+    whereParams.push(cursorId);
   }
 
   const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
   const fetchLimit = limit + 1;
   
-  // Add LIMIT parameter
-  queryParams.push(fetchLimit);
+  // ✅ FIXED: Params = whereParams + LIMIT (exact match!)
+  const queryParams = [...whereParams, fetchLimit];
 
   try {
-    // Build base query without LIMIT first
-    let sql = `SELECT * FROM payout_requests WHERE ${whereClause} ORDER BY id ${direction} LIMIT ?`;
+    // ✅ FIXED: Use selectClause + table alias for safety
+    const sql = `SELECT ${selectClause} 
+                 FROM payout_requests pr 
+                 WHERE ${whereClause} 
+                 ORDER BY pr.id ${direction} 
+                 LIMIT ?`;
     
-    console.log('📋 Query debug:', { whereClause, paramCount: queryParams.length, queryParams, fetchLimit });
-    console.log('📋 SQL:', sql);
+    console.log('📋 Query debug:', { 
+      whereClause, 
+      whereParams, 
+      fetchLimit, 
+      totalParams: queryParams.length,
+      sqlPreview: sql.substring(0, 200) + '...'
+    });
+    console.log('📋 Full SQL:', sql);
     console.log('📋 Params array:', queryParams);
     
     const [rows] = await pool.execute(sql, queryParams);
@@ -413,15 +423,19 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
         cursor: cursor || null,
         nextCursor,
         hasMore,
-        count: payouts.length
+        count: payouts.length,
+        direction
       }
     };
   } catch (err) {
     console.error('❌ getPayoutsCursorPaginated error:', err.message);
     console.error('SQL error code:', err.code);
+    console.error('SQL:', sql);
+    console.error('Params:', queryParams);
     throw err;
   }
 }
+
 
 module.exports = {
   createFundTransfer,
