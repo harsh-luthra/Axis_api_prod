@@ -385,16 +385,12 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   queryParams.push(fetchLimit);
 
   try {
-    const sql = `
-      SELECT *
-      FROM payout_requests
-      WHERE ${whereClause}
-      ORDER BY id ${direction}
-      LIMIT ?
-    `;
+    // Build base query without LIMIT first
+    let sql = `SELECT * FROM payout_requests WHERE ${whereClause} ORDER BY id ${direction} LIMIT ?`;
     
     console.log('📋 Query debug:', { whereClause, paramCount: queryParams.length, queryParams, fetchLimit });
     console.log('📋 SQL:', sql);
+    console.log('📋 Params array:', queryParams);
     
     const [rows] = await pool.execute(sql, queryParams);
 
