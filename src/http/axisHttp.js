@@ -3,20 +3,28 @@ const fs = require('fs');
 const https = require('https');
 const axios = require('axios');
 
-const p12Buffer = fs.readFileSync('./certs/keystore.p12');
+const path = require('path');
+const config = require('../config/axisConfig');
 
-const axisHttpsAgent = new https.Agent({
-  pfx: p12Buffer,
-  passphrase: 'Axis1234@A',      // as provided when Axis/you created it
-  // Optional: enforce cert validation
-  rejectUnauthorized: true
-});
+// Resolve p12 path from config/env
+const p12Path = path.resolve(config.jwe.clientP12Path || process.env.CLIENT_P12_PATH || './certs/keystore.p12');
+let axisHttpsAgent;
+if (fs.existsSync(p12Path)) {
+  const p12Buffer = fs.readFileSync(p12Path);
+  axisHttpsAgent = new https.Agent({
+    pfx: p12Buffer,
+    passphrase: config.jwe.clientP12Password || process.env.CLIENT_P12_PASSWORD,
+    rejectUnauthorized: true
+  });
+} else {
+  console.warn('⚠️ Axis p12 not found at', p12Path, '- HTTPS client will use default agent.');
+}
 
-function axisRequest(config) {
+function axisRequest(cfg) {
   return axios.request({
     httpsAgent: axisHttpsAgent,
-    timeout: 30000,
-    ...config
+    timeout: parseInt(process.env.AXIS_REQUEST_TIMEOUT || '30000', 10),
+    ...cfg
   });
 }
 

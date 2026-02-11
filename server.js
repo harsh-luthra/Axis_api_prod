@@ -1,5 +1,10 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
+const morgan = require('morgan');
 
 const { verifyChecksumAxis } = require('./src/security/checksumAxis');
 const { decryptAes256Callback } = require('./src/security/aesCallback');
@@ -30,7 +35,19 @@ const app = express();
 // app.use(bodyParser.json());
 // app.use(bodyParser.text({ type: '*/*' }));
 
-app.use(express.json());
+// Basic security middleware
+app.use(helmet());
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+app.use(morgan('combined'));
+
+// Apply a conservative rate limit for public endpoints
+app.use(rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false
+}));
 
 // Generate secure random API key
 function generateApiKey() {
@@ -61,7 +78,7 @@ app.use(async (req, res, next) => {
   if (req.path.startsWith('/admin/')){
     console.log('🔒 Admin access, skipping API key auth');
     return next();
-  } 
+  }
 
   const apiKey = req.headers['x-api-key'];
   if (!apiKey) return res.status(401).json({ error: 'X-API-Key required' });
@@ -194,7 +211,7 @@ app.post('/admin/revoke-key/:id', async (req, res) => {
 // --------- NEW CALLBACK HANDLER ----------
 app.post('/axis/callback', async (req, res) => {
   console.log('============================');
-  console.log('🔔 Axis Callback Received:', req.body);
+  console.log('🔔 Axis Callback Received');
   
   try {
     const encrypted = req.body?.GetStatusResponseBodyEncrypted || req.body;
@@ -204,12 +221,13 @@ app.post('/axis/callback', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    console.log('🔐 Encrypted:', encrypted);
+    // avoid logging full encrypted payloads in prod
+    console.log('🔐 Encrypted payload length:', typeof encrypted === 'string' ? encrypted.length : 'n/a');
 
     // decryptCallback() RETURNS OBJECT - NO JSON.parse needed!
     const decryptedObj = decryptCallback(encrypted);  // ← OBJECT
     
-    console.log('✅ Decrypted Object:', JSON.stringify(decryptedObj, null, 2));
+    console.log('✅ Decrypted Object keys:', Object.keys(decryptedObj || {}));
 
     const data = decryptedObj?.data || decryptedObj?.Data || decryptedObj;
 
