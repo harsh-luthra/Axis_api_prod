@@ -97,8 +97,14 @@ async function getMerchantByApiKey(apiKey) {
 // Enhanced middleware
 app.use(async (req, res, next) => {
   console.log(`➡️ ${req.method} ${req.path} from ${req.ip}`);
+  // Skip API key auth for admin UI and for Axis callback webhook
   if (req.path.startsWith('/admin/')){
     console.log('🔒 Admin access, skipping API key auth');
+    return next();
+  }
+
+  if (req.path === '/axis/callback' || req.path.startsWith('/axis/callback/')) {
+    console.log('🔔 Axis callback endpoint - skipping API key auth');
     return next();
   }
 
