@@ -33,12 +33,24 @@ const logger = require('winston');  // or pino
 const app = express();
 
 // Respect proxy headers (X-Forwarded-For) when running behind a proxy/load-balancer.
-// Default to trusting the first proxy unless explicitly disabled via TRUST_PROXY=false
+// Use a non-permissive default (trust 1 proxy). Set `TRUST_PROXY` to `false`, a
+// numeric value (e.g. `1`), or a specific IP/mask per Express docs.
 const _trustEnv = process.env.TRUST_PROXY;
-let trustProxyValue = true;
+let trustProxyValue = 1; // safest default when behind a single proxy (e.g. nginx/load-balancer)
 if (typeof _trustEnv !== 'undefined') {
-  const v = String(_trustEnv).toLowerCase();
-  if (v === '0' || v === 'false' || v === 'no') trustProxyValue = false;
+  const v = String(_trustEnv).trim();
+  const vl = v.toLowerCase();
+  if (vl === '0' || vl === 'false' || vl === 'no') {
+    trustProxyValue = false;
+  } else if (vl === 'true' || vl === '') {
+    // avoid permissive boolean true — treat `true` as `1`
+    trustProxyValue = 1;
+  } else if (!Number.isNaN(Number(v)) && v !== '') {
+    trustProxyValue = Number(v);
+  } else {
+    // allow values like 'loopback' or IP lists
+    trustProxyValue = v;
+  }
 }
 app.set('trust proxy', trustProxyValue);
 
