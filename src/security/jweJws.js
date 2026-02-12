@@ -34,7 +34,7 @@ async function loadJoseKeys() {
 
   // Axis public cert -> public key for encryption/verify
   const axisCertPem = fs.readFileSync(
-    path.resolve(__dirname, '../../certs/rgw.jwejws.uat.axisb.com-sscert.txt'),
+    path.resolve(__dirname, '../../certs/rgw.jwejws.axisb.com-sscert.txt'),
     'utf8'
   );
   const { X509Certificate } = require('crypto');
