@@ -1,5 +1,5 @@
 module.exports = {
-  env: 'UAT', // or 'PROD'
+  env: 'PROD', // or 'PROD'
 
   // https://sakshamuat.axisbank.co.in/gateway/api/txb/v3/payee-mgmt/beneficiary-registration
 
@@ -13,9 +13,9 @@ module.exports = {
     },
 
     PROD: {
-      transferPayment: 'https://saksham.axis.bank.in/gateway/api/txb/v3/payments/transfer-payment',
-      transferStatus:  'https://saksham.axis.bank.in/gateway/api/txb/v3/acct-recon/get-status',
-      getBalance:      'https://saksham.axis.bank.in/gateway/api/txb/v3/acct-recon/get-balance'
+      transferPayment: 'https://saksham.axisbank.co.in/gateway/api/txb/v3/payments/transfer-payment',
+      transferStatus:  'https://saksham.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-status',
+      getBalance:      'https://saksham.axisbank.co.in/gateway/api/txb/v3/acct-recon/get-balance'
     }
   },
 
@@ -36,7 +36,7 @@ module.exports = {
   // JWE/JWS crypto
   jwe: {
     // Axis public cert for JWE encryption + JWS verification (.cer/.pem)
-    axisPublicCertPath: './certs/rgw.jwejws.uat.axisb.com-sscert.txt',
+    axisPublicCertPath: './certs/rgw.jwejws.axisb.com-sscert.txt',
     // Your PKCS#12 that contains your RSA private key for signing + decrypting
     clientP12Path: './certs/keystore.p12',
     clientP12Password: 'Axis1234@A'
