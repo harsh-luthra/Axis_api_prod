@@ -25,11 +25,11 @@ module.exports = {
   },
 
   // replace with values provided by Axis
-  clientId: '984b95cd19c30af9bbf36d2e8f0db67b',
-  clientSecret: '9332840d867a45d9f9de287971f533a8',
+  clientId: 'ebf466922dd17136e20b00544d6b9758',
+  clientSecret: '25a52b58256cc2b3dce279304a2b7f2c',
   channelId: 'ELEVENPAY',
-  corpCode: 'EPSPL',
-  corpAccNum: '925020023195501',
+  corpCode: 'DEMOCORP159',
+  corpAccNum: '309010100067740',
 
   MASTER_API_KEY: '0123456789abcdef0123456789abcdef', // example from doc[file:7]
 
@@ -44,7 +44,7 @@ module.exports = {
 
   // Callback AES key etc (from callback docs)
   callback: {
-    aesKeyHex: 'acc28c91a3bdfc918a5067e19adeae1a', // example from doc[file:7]
+    aesKeyHex: '7d320cf27dab0564a8de42f4ca9f00ca', // example from doc[file:7]
     // ce98611eb501e541cca90c0229ec797e  // IV
     // If Axis gives you a different IV scheme, change AES util accordingly.
   }
