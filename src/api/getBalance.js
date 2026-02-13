@@ -35,10 +35,13 @@ function buildBalanceData(corpAccNum) {
 
 async function getBalance() {
   const merchantId = 1;  // For testing, assume merchant ID 1
-  const corpAccNum = '309010100067740'
+  const corpAccNum = '925020023195501'
   const url = config.urls[config.env].getBalance;
   const headers = baseHeaders();
   const body = buildBalanceData(corpAccNum);
+
+  console.log('Request Body:', body);  // Debug log
+
   const encryptedAndSigned = await jweEncryptAndSign(body);
 
   //   const response = await axios.post(url, encryptedAndSigned, { headers });
