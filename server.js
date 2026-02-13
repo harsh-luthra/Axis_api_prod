@@ -301,7 +301,7 @@ app.get('/balance/:merchantId', async (req, res) => {
   try {
     const merchantId = parseInt(req.params.merchantId) || 1;  // Default 1
     // const result = await require('./src/api/getBalance').getBalance(merchantId);
-    const result = await getBalance();
+    const result = await getBalance(merchantId);
     // console.log(result);
     // Latest snapshot
     const latest = await db.getLatestBalance(merchantId);

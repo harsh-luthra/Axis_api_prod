@@ -33,8 +33,8 @@ function buildBalanceData(corpAccNum) {
   return { Data: data };
 }
 
-async function getBalance() {
-  const merchantId = 1;  // For testing, assume merchant ID 1
+async function getBalance(mid) {
+  const merchantId = mid;  // For testing, assume merchant ID 1
   const corpAccNum = '925020023195501'
   const url = config.urls[config.env].getBalance;
   const headers = baseHeaders();
@@ -54,6 +54,8 @@ async function getBalance() {
     });
 
     const decrypted = await jweVerifyAndDecrypt(response.data);
+
+    console.log(decrypted);
 
     // NEW: Persist snapshot
     await db.saveBalanceSnapshot(merchantId, corpAccNum, decrypted);
