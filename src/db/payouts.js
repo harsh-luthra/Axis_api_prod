@@ -336,6 +336,7 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   if (!validLimits.includes(limit)) limit = 50;
 
   // Decode cursor
+  const VALID_DIRECTIONS = { ASC: 'ASC', DESC: 'DESC' };
   let cursorId = null;
   let direction = 'DESC';
   if (cursor) {
@@ -343,7 +344,8 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
       const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
       const [id, dir] = decoded.split('_');
       cursorId = parseInt(id, 10);
-      direction = dir === 'ASC' ? 'ASC' : 'DESC';
+      if (Number.isNaN(cursorId)) cursorId = null;
+      direction = VALID_DIRECTIONS[dir] || 'DESC';
     } catch (e) {
       console.warn('Invalid cursor:', cursor);
       cursorId = null;
@@ -370,13 +372,14 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   }
 
   const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
-  const fetchLimit = limit + 1;
-  
-  // 🔥 CRITICAL FIX: Inline LIMIT - MySQL/mysq2l2 doesn't bind LIMIT params reliably
-  const sql = `SELECT ${selectClause} FROM payout_requests pr 
-               WHERE ${whereClause} 
-               ORDER BY pr.id ${direction} 
-               LIMIT ${fetchLimit}`;
+  // Both values are safe: limit is from validLimits whitelist, direction is from VALID_DIRECTIONS lookup
+  const safeFetchLimit = Number(limit) + 1;
+  const safeDirection = VALID_DIRECTIONS[direction] || 'DESC';
+
+  const sql = `SELECT ${selectClause} FROM payout_requests pr
+               WHERE ${whereClause}
+               ORDER BY pr.id ${safeDirection}
+               LIMIT ${safeFetchLimit}`;
 
   try {
     console.log('📋 SQL:', sql);

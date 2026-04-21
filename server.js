@@ -81,17 +81,26 @@ function generateApiKey() {
 const merchantCache = new Map();
 async function getMerchantByApiKey(apiKey) {
   if (merchantCache.has(apiKey)) return merchantCache.get(apiKey);
-  
+
   const [merchants] = await pool.execute(
     'SELECT * FROM merchants WHERE api_key = ? AND is_active = TRUE',
     [apiKey]
   );
-  
+
   if (merchants[0]) {
     merchantCache.set(apiKey, merchants[0]);
     setTimeout(() => merchantCache.delete(apiKey), 5 * 60 * 1000); // 5min cache
   }
   return merchants[0];
+}
+
+// Evict a merchant from the auth cache by merchant ID (e.g. on key revoke)
+function evictMerchantCache(merchantId) {
+  for (const [key, merchant] of merchantCache) {
+    if (String(merchant.id) === String(merchantId)) {
+      merchantCache.delete(key);
+    }
+  }
 }
 
 
@@ -118,13 +127,18 @@ app.use(async (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   if (!apiKey) return res.status(401).json({ error: 'X-API-Key required' });
 
-  const merchant = await getMerchantByApiKey(apiKey);
-  if (!merchant) return res.status(401).json({ error: 'Invalid API key' });
+  try {
+    const merchant = await getMerchantByApiKey(apiKey);
+    if (!merchant) return res.status(401).json({ error: 'Invalid API key' });
 
-  req.merchant = merchant;  // { id, merchant_name, corp_code, vendor_code, ... }
-  console.log(`✅ Auth: ${merchant.merchant_name} (${apiKey.slice(0,8)}...)`);
-  
-  next();
+    req.merchant = merchant;  // { id, merchant_name, corp_code, vendor_code, ... }
+    console.log(`✅ Auth: ${merchant.merchant_name} (${apiKey.slice(0,8)}...)`);
+
+    next();
+  } catch (err) {
+    console.error('❌ Auth middleware error:', err.message);
+    res.status(503).json({ error: 'Service temporarily unavailable' });
+  }
 });
 
 
@@ -215,21 +229,46 @@ app.get('/admin/merchants', async (req, res) => {
   res.json(merchants);
 });
 
-// POST /admin/revoke-key/{merchantId}
+// POST /admin/revoke-key/{merchantId} — deactivates the merchant
 app.post('/admin/revoke-key/:id', async (req, res) => {
   if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  
+
+  const merchantId = req.params.id;
+
+  await pool.execute(
+    'UPDATE merchants SET is_active = FALSE WHERE id = ?',
+    [merchantId]
+  );
+
+  evictMerchantCache(merchantId);
+
+  res.json({ revoked: true, merchant_id: merchantId });
+});
+
+// POST /admin/rotate-key/{merchantId} — generates a new key, keeps merchant active
+app.post('/admin/rotate-key/:id', async (req, res) => {
+  if (req.headers['x-master-key'] !== config.MASTER_API_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
   const merchantId = req.params.id;
   const newKey = generateApiKey();
-  
+
   await pool.execute(
-    'UPDATE merchants SET api_key = ?, is_active = FALSE WHERE id = ?',
+    'UPDATE merchants SET api_key = ? WHERE id = ? AND is_active = TRUE',
     [newKey, merchantId]
   );
-  
-  res.json({ revoked: true, new_key: newKey });
+
+  evictMerchantCache(merchantId);
+
+  await pool.execute(
+    'INSERT INTO api_keys (merchant_id, new_key, generated_by, reason) VALUES (?, ?, ?, ?)',
+    [merchantId, newKey, req.ip || 'unknown', 'Key rotation']
+  );
+
+  res.json({ rotated: true, merchant_id: merchantId, api_key: newKey });
 });
 
 
@@ -602,18 +641,19 @@ const server = app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM: Shutting down gracefully...');
-  server.close(() => {
+function gracefulShutdown(signal) {
+  console.log(`${signal}: Shutting down gracefully...`);
+  server.close(async () => {
     console.log('Server closed');
+    try {
+      await pool.end();
+      console.log('MySQL pool closed');
+    } catch (err) {
+      console.error('Error closing MySQL pool:', err.message);
+    }
     process.exit(0);
   });
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('SIGINT: Shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
