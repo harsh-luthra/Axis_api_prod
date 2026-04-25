@@ -8,7 +8,7 @@ const { callback } = require('../config/axisConfig');
 const AXIS_CALLBACK_KEY_STRING = (callback.aesKeyHex); // Axis shared secret
 
 // from bank: key128: 7d320cf27dab0564a8de42f4ca9f00ca
-const KEY_HEX = '7d320cf27dab0564a8de42f4ca9f00ca';
+// const KEY_HEX = '7d320cf27dab0564a8de42f4ca9f00ca';
 
 // fixed IV: 00 01 ... 0f (Axis sample) [file:106]
 const IV = Buffer.from([
@@ -19,7 +19,7 @@ const IV = Buffer.from([
 ]);
 
 function decryptCallback(cipherTextB64) {
-  const key = Buffer.from(KEY_HEX, 'hex');
+  const key = Buffer.from(AXIS_CALLBACK_KEY_STRING, 'hex');
   const cipherBytes = Buffer.from(cipherTextB64, 'base64');
 
   const decipher = crypto.createDecipheriv('aes-128-cbc', key, IV);

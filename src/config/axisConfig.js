@@ -45,6 +45,7 @@ module.exports = {
   // Callback AES key etc (from callback docs)
   callback: {
     aesKeyHex: 'acc28c91a3bdfc918a5067e19adeae1a', // example from doc[file:7]
+    // acc28c91a3bdfc9118a5067e19adeae1a
     // ce98611eb501e541cca90c0229ec797e  // IV
     // If Axis gives you a different IV scheme, change AES util accordingly.
   }

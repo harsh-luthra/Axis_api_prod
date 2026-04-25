@@ -293,6 +293,8 @@ app.post('/axis/callback', async (req, res) => {
     
     console.log('✅ Decrypted Object keys:', Object.keys(decryptedObj || {}));
 
+    console.log('📦 FULL DECRYPTED OBJECT:\n', JSON.stringify(decryptedObj, null, 2));
+
     const data = decryptedObj?.data || decryptedObj?.Data || decryptedObj;
 
     if (!verifyChecksumAxis(data)) {
@@ -607,6 +609,13 @@ app.get('/payouts', async (req, res) => {
   }
 });
 
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: Date.now()
+  });
+});
 
 // --------- ERROR HANDLER ----------
 
