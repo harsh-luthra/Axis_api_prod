@@ -2,34 +2,6 @@ const pool = require('./mysql');
 const config = require('../config/axisConfig');
 const crypto = require('crypto');
 
-// async function createPayoutTransfer(payload, axisResponse) {
-//   const [result] = await pool.execute(`
-//     INSERT INTO payout_requests (
-//       merchant_id, crn, idempotency_key, txn_paymode, txn_type, txn_amount, 
-//       bene_ifsc_code, bene_acc_num, value_date, bene_name, corp_acc_num,
-//       checksum_sent, axis_txn_ref, axis_response, status
-//     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-//   `, [
-//     payload.merchant_id || 1,
-//     payload.custUniqRef,  // CRN - golden key
-//     payload.idempotency_key || crypto.randomUUID(),
-//     payload.txnPaymode,
-//     payload.txnType || 'CUST',
-//     payload.txnAmount,
-//     payload.beneIfscCode,
-//     payload.beneAccNum,
-//     payload.valueDate,
-//     payload.beneName,
-//     payload.corpAccNum,
-//     payload.checksum,
-//     axisResponse?.data?.txnReferenceId,
-//     JSON.stringify(axisResponse),
-//     axisResponse?.data?.status === 'S' ? 'processing' : 'failed'
-//   ]);
-  
-//   return result.insertId;
-// }
-
 async function createFundTransfer(merchantId, ftDetails, axisResponse) {
   const paymentDetails = ftDetails.paymentDetails?.[0] || ftDetails;
   const safeNull = (val) => val === '' || val == null ? null : val;
