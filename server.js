@@ -1,15 +1,14 @@
 require('dotenv').config();
 const express = require('express');
-// const bodyParser = require('body-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const morgan = require('morgan');
 
+const axios = require('axios');
+
 const { verifyChecksumAxis } = require('./src/security/checksumAxis');
-// const { decryptAes256Callback } = require('./src/security/aesCallback');
 const { decryptCallback } = require('./src/security/axisAes128');
-// const { decryptHexAes128Ecb } = require('./src/security/axisAes128Ecb');
 const pool = require('./src/db/mysql');
 
 // NEW: imports for get balance
@@ -271,6 +270,14 @@ app.post('/admin/rotate-key/:id', async (req, res) => {
   res.json({ rotated: true, merchant_id: merchantId, api_key: newKey });
 });
 
+app.get('/debug-time', (req, res) => {
+  console.log('============================');
+  console.log('🔔 Debug Time');
+  res.json({
+    time: new Date().toISOString(),
+    random: Math.random()
+  });
+});
 
 // --------- NEW CALLBACK HANDLER ----------
 app.post('/axis/callback', async (req, res) => {
@@ -327,6 +334,31 @@ app.post('/axis/callback', async (req, res) => {
     console.log('✅ Processing:', txnUpdate);
 
     await db.handleCallback(txnUpdate);
+
+    /* ===========================
+       🔁 FORWARD (NON-BLOCKING SAFE)
+    =========================== */
+    const FORWARD_URL = 'https://orbitwealth.co.in/utr/callback.php';
+
+    setImmediate(() => {
+      axios.post(FORWARD_URL, txnUpdate, {
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then((resp) => {
+        console.log('📤 Forwarded:', resp.status);
+      })
+      .catch((err) => {
+        console.error('❌ Forward failed:', err.message);
+
+        // OPTIONAL: retry once
+        setTimeout(() => {
+          axios.post(FORWARD_URL, txnUpdate).catch(() => {});
+        }, 3000);
+      });
+    });
 
     res.status(200).send('OK');
     

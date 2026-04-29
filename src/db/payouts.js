@@ -93,39 +93,40 @@ async function updatePayoutStatus(crn, axisResponse) {
     
     const txnStatusInt = mapStatusToInt(latestStatus.transactionStatus);
     
-    const [result] = await pool.execute(`
-      INSERT INTO payout_status_events (
-        payout_id, corp_code, crn, utr_no, transaction_status, 
-        status_description, batch_no, processing_date, respone_code, 
-        checksum_received, raw_response
-      ) VALUES (
-        (SELECT id FROM payout_requests WHERE crn = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-      ) ON DUPLICATE KEY UPDATE 
-        raw_response = VALUES(raw_response),
-        timestamp = CURRENT_TIMESTAMP
-    `, [
-      crn,
-      safeNull(latestStatus.corpCode),
-      safeNull(latestStatus.crn),
-      safeNull(latestStatus.utrNo),
-      txnStatusInt,                          // ? 2 = "REJECTED"
-      safeNull(latestStatus.statusDescription),
-      safeNull(latestStatus.batchNo),
-      parseProcessingDate(latestStatus.processingDate),
-      safeNull(latestStatus.responseCode),
-      safeNull(axisResponse.decrypted?.Data?.data?.checksum),
-      JSON.stringify(axisResponse.decrypted?.Data)
-    ]);
+    // const [result] = await pool.execute(`
+    //   INSERT INTO payout_status_events (
+    //     payout_id, corp_code, crn, utr_no, transaction_status, 
+    //     status_description, batch_no, processing_date, respone_code, 
+    //     checksum_received, raw_response
+    //   ) VALUES (
+    //     (SELECT id FROM payout_requests WHERE crn = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    //   ) ON DUPLICATE KEY UPDATE 
+    //     raw_response = VALUES(raw_response),
+    //     timestamp = CURRENT_TIMESTAMP
+    // `, [
+    //   crn,
+    //   safeNull(latestStatus.corpCode),
+    //   safeNull(latestStatus.crn),
+    //   safeNull(latestStatus.utrNo),
+    //   txnStatusInt,                          // ? 2 = "REJECTED"
+    //   safeNull(latestStatus.statusDescription),
+    //   safeNull(latestStatus.batchNo),
+    //   parseProcessingDate(latestStatus.processingDate),
+    //   safeNull(latestStatus.responseCode),
+    //   safeNull(axisResponse.decrypted?.Data?.data?.checksum),
+    //   JSON.stringify(axisResponse.decrypted?.Data)
+    // ]);
     
     // Update main payout
     // ? FIXED - No comments inside SQL
+    
     console.log('ℹ️  Updating payout_requests:', {
       crn,
       txnStatusInt,
       statusDescription: safeNull(latestStatus.statusDescription)
     });
 
-    await pool.execute(`
+    const [updateResult] = await pool.execute(`
       UPDATE payout_requests SET 
         status = CASE 
           WHEN ? = 3 THEN 'processed'
@@ -143,7 +144,9 @@ async function updatePayoutStatus(crn, axisResponse) {
     `, [txnStatusInt, txnStatusInt, txnStatusInt, safeNull(latestStatus.statusDescription), safeNull(latestStatus.responseCode), safeNull(latestStatus.batchNo), safeNull(latestStatus.transactionId), safeNull(latestStatus.utrNo), crn]);
 
     console.log(`✅ ${crn} → ${latestStatus.transactionStatus} (${txnStatusInt})`);
-    return result;
+    
+    return updateResult;
+
   } catch (err) {
     console.error('❌ updatePayoutStatus Error for CRN', crn, ':', err.message);
     throw err;
