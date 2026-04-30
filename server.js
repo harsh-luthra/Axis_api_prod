@@ -30,6 +30,8 @@ const db = require('./src/db/payouts');
 // 2. Add proper logging middleware
 const logger = require('winston');// or pino
 
+process.env.TZ = 'Asia/Kolkata';
+
 const app = express();
 
 // Respect proxy headers (X-Forwarded-For) when running behind a proxy/load-balancer.
@@ -338,7 +340,8 @@ app.post('/axis/callback', async (req, res) => {
     /* ===========================
        🔁 FORWARD (NON-BLOCKING SAFE)
     =========================== */
-    const FORWARD_URL = 'https://orbitwealth.co.in/utr/callback.php';
+    // const FORWARD_URL = 'https://orbitwealth.co.in/utr/callback.php';
+    const FORWARD_URL = 'https://codingpey.com/api/axis/callback';
 
     setImmediate(() => {
       axios.post(FORWARD_URL, txnUpdate, {
