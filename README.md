@@ -141,6 +141,77 @@ curl -X GET http://localhost:3000/balance/1 \
   -H "X-API-Key: $API_KEY"
 ```
 
+### List Axis Callbacks (cursor-paginated)
+
+Returns the decrypted callbacks Axis has posted back to `/axis/callback` for the authenticated merchant's payouts. Supports cursor-based pagination so clients can stream large histories without OFFSET drift.
+
+**Endpoint:** `GET /axis-callbacks`
+**Auth:** `X-API-Key` (merchant-scoped — only callbacks tied to this merchant's `payout_requests` are returned).
+
+**Query parameters:**
+
+| Param    | Type    | Default | Notes |
+|----------|---------|---------|-------|
+| `limit`  | integer | `50`    | Allowed values: `50`, `100`, `200`. Anything else falls back to `50`. |
+| `cursor` | string  | `null`  | Opaque base64 cursor returned as `nextCursor` from a prior page. |
+| `mode`   | string  | `full`  | `full` returns every column; `half` returns a summary projection. |
+
+**Example — first page:**
+```bash
+curl -X GET "http://localhost:3000/axis-callbacks?limit=50&mode=full" \
+  -H "X-API-Key: $API_KEY"
+```
+
+**Example — next page:**
+```bash
+curl -X GET "http://localhost:3000/axis-callbacks?limit=50&cursor=$NEXT_CURSOR" \
+  -H "X-API-Key: $API_KEY"
+```
+
+**Response (`mode=full`):**
+```json
+{
+  "success": true,
+  "callbacks": [
+    {
+      "id": 482,
+      "payout_id": 311,
+      "crn": "REF1777619186",
+      "transaction_id": "CN1330078687",
+      "utr_no": "AXISCN1330078687",
+      "transaction_status": "PROCESSED",
+      "status_description": "Success--UTIBN62026050147649168",
+      "response_code": "ACAR",
+      "batch_no": "36",
+      "amount": "10",
+      "callback_forwarded": 1,
+      "raw_payload": "{...}",
+      "received_at": "2026-05-01T12:48:06.000Z"
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "cursor": null,
+    "nextCursor": "NDgyX0RFU0M=",
+    "hasMore": true,
+    "count": 50,
+    "direction": "DESC"
+  }
+}
+```
+
+**Response (`mode=half`)** drops `payout_id`, `response_code`, `batch_no`, `amount`, and `raw_payload` — keeping `id`, `crn`, `transaction_id`, `utr_no`, `transaction_status`, `status_description`, `callback_forwarded`, and `received_at`.
+
+**Pagination contract:**
+- Results are ordered by `axis_callbacks.id DESC` (newest first).
+- When `hasMore` is `true`, pass `nextCursor` as `cursor` on the next request.
+- `nextCursor` is `null` on the last page.
+- Cursors are not portable across `direction` changes — keep using the cursor that was returned to you.
+
+**Field notes:**
+- `callback_forwarded`: `1` once the callback has been successfully forwarded to the downstream URL configured in `/axis/callback`; `0` if forwarding has not (yet) succeeded. Use this to identify callbacks that need re-delivery.
+- `raw_payload`: the JSON Axis posted to us, kept verbatim for audit/debug.
+
 ---
 
 ## 🧪 Testing & Quality

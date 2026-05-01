@@ -281,19 +281,6 @@ app.get('/debug-time', (req, res) => {
   });
 });
 
-// --------- /me (current merchant info) ----------
-app.get('/me', (req, res) => {
-  if (!req.merchant) return res.status(401).json({ error: 'Not authenticated' });
-  const m = req.merchant;
-  res.json({
-    id: m.id,
-    merchant_name: m.merchant_name,
-    corp_code: m.corp_code,
-    vendor_code: m.vendor_code,
-    corporate_account: m.corporate_account
-  });
-});
-
 // --------- NEW CALLBACK HANDLER ----------
 app.post('/axis/callback', async (req, res) => {
   console.log('============================');
@@ -327,67 +314,54 @@ app.post('/axis/callback', async (req, res) => {
     /* ===========================
        EXTRACT CRN & STATUS
     =========================== */
-    const records = Array.isArray(data?.CUR_TXN_ENQ) ? data.CUR_TXN_ENQ : [];
+    const record = data?.CUR_TXN_ENQ?.[0];
 
-    if (records.length === 0) {
-      console.error('❌ No transaction records in callback');
+    if (!record?.crn) {
+      console.error('❌ CRN missing');
       return res.status(200).send('OK');
     }
 
+    // In server.js route:
+    const txnUpdate = {
+      crn: record.crn,
+      transactionId: record.transaction_id,
+      utrNo: record.utrNo,
+      transactionStatus: record.transactionStatus,  // ← Send this
+      statusDescription: record.statusDescription,
+      responseCode: record.responseCode,
+      batchNo: record.batchNo,
+      amount: record.amount
+    };
+
+    console.log('✅ Processing:', txnUpdate);
+
+    await db.handleCallback(txnUpdate);
+
+    /* ===========================
+       🔁 FORWARD (NON-BLOCKING SAFE)
+    =========================== */
+    // const FORWARD_URL = 'https://orbitwealth.co.in/utr/callback.php';
     const FORWARD_URL = 'https://codingpey.com/api/axis/callback';
 
-    for (const record of records) {
-      if (!record?.crn) {
-        console.error('❌ CRN missing in record, skipping:', record);
-        continue;
-      }
+    setImmediate(() => {
+      axios.post(FORWARD_URL, txnUpdate, {
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then((resp) => {
+        console.log('📤 Forwarded:', resp.status);
+      })
+      .catch((err) => {
+        console.error('❌ Forward failed:', err.message);
 
-      const txnUpdate = {
-        crn: record.crn,
-        transactionId: record.transaction_id,
-        utrNo: record.utrNo,
-        transactionStatus: record.transactionStatus,
-        statusDescription: record.statusDescription,
-        responseCode: record.responseCode,
-        batchNo: record.batchNo,
-        amount: record.amount
-      };
-
-      console.log('✅ Processing:', txnUpdate);
-
-      let callbackId = null;
-      try {
-        callbackId = await db.handleCallback(txnUpdate);
-      } catch (dbErr) {
-        console.error('❌ DB handleCallback failed for crn', txnUpdate.crn, dbErr.message);
-      }
-
-      /* ===========================
-         🔁 FORWARD (NON-BLOCKING SAFE)
-      =========================== */
-      setImmediate(() => {
-        axios.post(FORWARD_URL, txnUpdate, {
-          timeout: 5000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-        .then((resp) => {
-          console.log('📤 Forwarded crn', txnUpdate.crn, '->', resp.status);
-          db.markCallbackForwarded(callbackId, 1);
-        })
-        .catch((err) => {
-          console.error('❌ Forward failed for crn', txnUpdate.crn, err.message);
-
-          setTimeout(() => {
-            axios.post(FORWARD_URL, txnUpdate)
-              .then(() => db.markCallbackForwarded(callbackId, 1))
-              .catch(() => {});
-          }, 3000);
-        });
+        // OPTIONAL: retry once
+        setTimeout(() => {
+          axios.post(FORWARD_URL, txnUpdate).catch(() => {});
+        }, 3000);
       });
-
-    }
+    });
 
     res.status(200).send('OK');
     
@@ -648,36 +622,16 @@ app.post('/test-add-beneficiary', validateRequest(addBeneficiarySchema, 'body'),
  *   - cursor: base64-encoded cursor for pagination (optional)
  *   - mode: 'full' or 'half' response (default: 'full')
  */
-app.get('/payouts/:crn', async (req, res) => {
-  try {
-    const merchantId = req.merchant?.id;
-    if (!merchantId) return res.status(401).json({ error: 'Not authenticated' });
-
-    const result = await db.getPayoutDetailByCrn(merchantId, req.params.crn);
-    if (!result) return res.status(404).json({ error: 'Payout not found' });
-
-    res.json(result);
-  } catch (error) {
-    console.error('❌ GET /payouts/:crn error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch payout',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
 app.get('/payouts', async (req, res) => {
   try {
     const merchantId = req.merchant?.id || null;  // From auth middleware
     const limit = parseInt(req.query.limit) || 50;
     const cursor = req.query.cursor || null;
     const mode = req.query.mode || 'full';  // 'full' or 'half'
-    const status = req.query.status || null;
 
-    console.log(`📊 Fetching payouts: merchantId=${merchantId}, limit=${limit}, mode=${mode}, status=${status}`);
+    console.log(`📊 Fetching payouts: merchantId=${merchantId}, limit=${limit}, mode=${mode}`);
 
-    const result = await db.getPayoutsCursorPaginated(merchantId, limit, cursor, mode, status);
+    const result = await db.getPayoutsCursorPaginated(merchantId, limit, cursor, mode);
 
     res.json(result);
   } catch (error) {
@@ -685,29 +639,6 @@ app.get('/payouts', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch payouts',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// --------- GET /axis-callbacks (cursor-paginated) ----------
-app.get('/axis-callbacks', async (req, res) => {
-  try {
-    const merchantId = req.merchant?.id || null;
-    const limit = parseInt(req.query.limit) || 50;
-    const cursor = req.query.cursor || null;
-    const mode = req.query.mode || 'full';
-
-    console.log(`📊 Fetching callbacks: merchantId=${merchantId}, limit=${limit}, mode=${mode}`);
-
-    const result = await db.getCallbacksCursorPaginated(merchantId, limit, cursor, mode);
-
-    res.json(result);
-  } catch (error) {
-    console.error('❌ GET /axis-callbacks error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch callbacks',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

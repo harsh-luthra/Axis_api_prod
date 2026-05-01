@@ -165,14 +165,15 @@ async function handleCallback(payload) {
     
     if (payouts.length === 0) {
       console.log('❌ Orphan:', payload.crn);
-      return;
+      return null;
     }
-    
-    await pool.execute(`
+
+    const [insertResult] = await pool.execute(`
       INSERT INTO axis_callbacks (
         payout_id, crn, transaction_id, utr_no, transaction_status,
-        status_description, response_code, batch_no, amount, raw_payload
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        status_description, response_code, batch_no, amount, raw_payload,
+        callback_forwarded
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       payouts[0].id,
       payload.crn?.trim(),
@@ -183,10 +184,12 @@ async function handleCallback(payload) {
       payload.responseCode || null,                      // ✅ Explicit NULL
       payload.batchNo || null,
       payload.amount,
-      JSON.stringify(payload)
+      JSON.stringify(payload),
+      0
     ]);
-    
-    console.log('✅ Saved:', payload.crn);
+
+    const callbackId = insertResult.insertId;
+    console.log('✅ Saved:', payload.crn, 'callback_id:', callbackId);
     // Persist utr_no and transaction_id back to payout_requests so main row reflects callback values
     try {
       await pool.execute(
@@ -226,9 +229,23 @@ async function handleCallback(payload) {
       console.error('⚠️  Status update failed for CRN', payload.crn, ':', statusUpdateErr.message);
       // Don't re-throw - callback was already saved
     }
+
+    return callbackId;
   } catch (err) {
     console.error('❌ handleCallback Error:', err.message);
     throw err;
+  }
+}
+
+async function markCallbackForwarded(callbackId, forwarded = 1) {
+  if (!callbackId) return;
+  try {
+    await pool.execute(
+      'UPDATE axis_callbacks SET callback_forwarded = ? WHERE id = ?',
+      [forwarded ? 1 : 0, callbackId]
+    );
+  } catch (err) {
+    console.error('⚠️ Failed to update callback_forwarded for id', callbackId, err.message);
   }
 }
 
@@ -283,6 +300,22 @@ async function checkFundTransferExists(custUniqRef) {
   return rows.length > 0;
 }
 
+async function getPayoutDetailByCrn(merchantId, crn) {
+  const [payouts] = await pool.execute(
+    'SELECT * FROM payout_requests WHERE crn = ? AND merchant_id = ? LIMIT 1',
+    [crn, merchantId]
+  );
+  if (payouts.length === 0) return null;
+
+  const payout = payouts[0];
+  const [callbacks] = await pool.execute(
+    'SELECT * FROM axis_callbacks WHERE payout_id = ? ORDER BY received_at DESC',
+    [payout.id]
+  );
+
+  return { payout, callbacks };
+}
+
 async function getLatestBalance(merchantId) {
   const [rows] = await pool.execute(`
     SELECT * FROM balance_snapshots 
@@ -306,7 +339,7 @@ async function getLatestBalance(merchantId) {
 // ============================================================================
 // ✅ 100% WORKING - NO PARAMETER BINDING FOR LIMIT
 // ============================================================================
-async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor = null, mode = 'full') {
+async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor = null, mode = 'full', status = null) {
   const validLimits = [50, 100, 200];
   if (!validLimits.includes(limit)) limit = 50;
 
@@ -327,8 +360,12 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
     }
   }
 
+  // Whitelist status filter to prevent SQL injection
+  const VALID_STATUSES = ['pending', 'processing', 'processed', 'failed', 'reject', 'return'];
+  const filterStatus = VALID_STATUSES.includes(status) ? status : null;
+
   // Select fields
-  const selectClause = mode === 'half' 
+  const selectClause = mode === 'half'
     ? 'pr.id, pr.crn, pr.txn_paymode, pr.txn_amount, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code, pr.status, pr.status_description, pr.created_at, pr.updated_at'
     : 'pr.id, pr.merchant_id, pr.crn, pr.txn_paymode, pr.txn_type, pr.txn_amount, pr.bene_code, pr.bene_name, pr.bene_acc_num, pr.bene_ifsc_code, pr.bene_bank_name, pr.corp_acc_num, pr.value_date, pr.status, pr.created_at, pr.updated_at';
 
@@ -339,6 +376,11 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
   if (merchantId !== null) {
     whereParts.push('pr.merchant_id = ?');
     whereParams.push(merchantId);
+  }
+
+  if (filterStatus) {
+    whereParts.push('pr.status = ?');
+    whereParams.push(filterStatus);
   }
 
   if (cursorId !== null) {
@@ -394,13 +436,94 @@ async function getPayoutsCursorPaginated(merchantId = null, limit = 50, cursor =
 
 
 
+async function getCallbacksCursorPaginated(merchantId = null, limit = 50, cursor = null, mode = 'full') {
+  const validLimits = [50, 100, 200];
+  if (!validLimits.includes(limit)) limit = 50;
+
+  const VALID_DIRECTIONS = { ASC: 'ASC', DESC: 'DESC' };
+  let cursorId = null;
+  let direction = 'DESC';
+  if (cursor) {
+    try {
+      const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+      const [id, dir] = decoded.split('_');
+      cursorId = parseInt(id, 10);
+      if (Number.isNaN(cursorId)) cursorId = null;
+      direction = VALID_DIRECTIONS[dir] || 'DESC';
+    } catch (e) {
+      console.warn('Invalid cursor:', cursor);
+      cursorId = null;
+    }
+  }
+
+  const selectClause = mode === 'half'
+    ? 'ac.id, ac.crn, ac.transaction_id, ac.utr_no, ac.transaction_status, ac.status_description, ac.callback_forwarded, ac.received_at'
+    : 'ac.id, ac.payout_id, ac.crn, ac.transaction_id, ac.utr_no, ac.transaction_status, ac.status_description, ac.response_code, ac.batch_no, ac.amount, ac.callback_forwarded, ac.raw_payload, ac.received_at';
+
+  let whereParts = [];
+  let whereParams = [];
+
+  if (merchantId !== null) {
+    whereParts.push('pr.merchant_id = ?');
+    whereParams.push(merchantId);
+  }
+
+  if (cursorId !== null) {
+    whereParts.push(direction === 'DESC' ? 'ac.id < ?' : 'ac.id > ?');
+    whereParams.push(cursorId);
+  }
+
+  const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
+  const safeFetchLimit = Number(limit) + 1;
+  const safeDirection = VALID_DIRECTIONS[direction] || 'DESC';
+
+  const sql = `SELECT ${selectClause} FROM axis_callbacks ac
+               JOIN payout_requests pr ON pr.id = ac.payout_id
+               WHERE ${whereClause}
+               ORDER BY ac.id ${safeDirection}
+               LIMIT ${safeFetchLimit}`;
+
+  try {
+    const [rows] = await pool.execute(sql, whereParams);
+
+    const hasMore = rows.length > limit;
+    const callbacks = rows.slice(0, limit);
+
+    let nextCursor = null;
+    if (hasMore && callbacks.length > 0) {
+      const lastId = callbacks[callbacks.length - 1].id;
+      nextCursor = Buffer.from(`${lastId}_${direction}`).toString('base64');
+    }
+
+    return {
+      success: true,
+      callbacks,
+      pagination: {
+        limit,
+        cursor: cursor || null,
+        nextCursor,
+        hasMore,
+        count: callbacks.length,
+        direction
+      }
+    };
+  } catch (err) {
+    console.error('❌ getCallbacksCursorPaginated error:', err.message);
+    throw new Error(`Callbacks fetch failed: ${err.message}`);
+  }
+}
+
+
 module.exports = {
   createFundTransfer,
   updatePayoutStatus,
   handleCallback,
+  markCallbackForwarded,
   saveBalanceSnapshot,
   getLatestBalance,
   getMerchantBalance,
   checkFundTransferExists,
-  getPayoutsCursorPaginated
+  getPayoutDetailByCrn,
+  getPayoutsCursorPaginated,
+  getCallbacksCursorPaginated
 };
