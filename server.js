@@ -20,6 +20,26 @@ const { jweEncryptAndSign, jweVerifyAndDecrypt, loadJoseKeys,  } = require('./sr
 const { getBalance } = require('./src/api/getBalance.js');
 
 const crypto = require('crypto');
+const https = require('https');
+
+const insecureAgent = new https.Agent({
+  rejectUnauthorized: false
+});
+
+const FORWARD_URL = process.env.CALLBACK_FORWARD_URL || 'https://codingpey.com/api/axis/callback';
+
+function buildForwardPayload(record) {
+  return {
+    crn: record.crn,
+    transactionId: record.transaction_id,
+    utrNo: record.utr_no,
+    transactionStatus: record.transaction_status,
+    statusDescription: record.status_description,
+    responseCode: record.response_code,
+    batchNo: record.batch_no,
+    amount: record.amount
+  };
+}
 
 const { fundTransfer } = require('./src/api/transferPayment');
 const { getTransferStatus } = require('./src/api/getTransferStatus');
@@ -334,8 +354,6 @@ app.post('/axis/callback', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    const FORWARD_URL = 'https://codingpey.com/api/axis/callback';
-
     for (const record of records) {
       if (!record?.crn) {
         console.error('❌ CRN missing in record, skipping:', record);
@@ -366,25 +384,25 @@ app.post('/axis/callback', async (req, res) => {
          🔁 FORWARD (NON-BLOCKING SAFE)
       =========================== */
       setImmediate(() => {
-        axios.post(FORWARD_URL, txnUpdate, {
+        const forwardOpts = {
           timeout: 5000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-        .then((resp) => {
-          console.log('📤 Forwarded crn', txnUpdate.crn, '->', resp.status);
-          db.markCallbackForwarded(callbackId, 1);
-        })
-        .catch((err) => {
-          console.error('❌ Forward failed for crn', txnUpdate.crn, err.message);
+          headers: { 'Content-Type': 'application/json' },
+          httpsAgent: insecureAgent
+        };
+        axios.post(FORWARD_URL, txnUpdate, forwardOpts)
+          .then((resp) => {
+            console.log('📤 Forwarded crn', txnUpdate.crn, '->', resp.status);
+            db.markCallbackForwarded(callbackId, 1);
+          })
+          .catch((err) => {
+            console.error('❌ Forward failed for crn', txnUpdate.crn, err.message);
 
-          setTimeout(() => {
-            axios.post(FORWARD_URL, txnUpdate)
-              .then(() => db.markCallbackForwarded(callbackId, 1))
-              .catch(() => {});
-          }, 3000);
-        });
+            setTimeout(() => {
+              axios.post(FORWARD_URL, txnUpdate, forwardOpts)
+                .then(() => db.markCallbackForwarded(callbackId, 1))
+                .catch(() => {});
+            }, 3000);
+          });
       });
 
     }
@@ -687,6 +705,41 @@ app.get('/payouts', async (req, res) => {
       error: 'Failed to fetch payouts',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+});
+
+// --------- POST /axis-callbacks/:id/reforward ----------
+app.post('/axis-callbacks/:id/reforward', async (req, res) => {
+  try {
+    const merchantId = req.merchant?.id;
+    if (!merchantId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const callbackId = parseInt(req.params.id, 10);
+    if (Number.isNaN(callbackId)) return res.status(400).json({ error: 'Invalid id' });
+
+    const cb = await db.getCallbackForReforward(merchantId, callbackId);
+    if (!cb) return res.status(404).json({ error: 'Callback not found' });
+
+    const payload = buildForwardPayload(cb);
+    try {
+      const resp = await axios.post(FORWARD_URL, payload, {
+        timeout: 5000,
+        headers: { 'Content-Type': 'application/json' },
+        httpsAgent: insecureAgent
+      });
+      await db.markCallbackForwarded(callbackId, 1);
+      return res.json({ success: true, downstreamStatus: resp.status });
+    } catch (err) {
+      console.error('❌ Manual reforward failed for callback', callbackId, err.message);
+      return res.status(502).json({
+        success: false,
+        error: err.message,
+        downstreamStatus: err.response?.status || null
+      });
+    }
+  } catch (err) {
+    console.error('❌ POST /axis-callbacks/:id/reforward error:', err.message);
+    res.status(500).json({ error: 'Internal error' });
   }
 });
 

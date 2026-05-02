@@ -237,6 +237,17 @@ async function handleCallback(payload) {
   }
 }
 
+async function getCallbackForReforward(merchantId, callbackId) {
+  const [rows] = await pool.execute(
+    `SELECT ac.* FROM axis_callbacks ac
+     JOIN payout_requests pr ON pr.id = ac.payout_id
+     WHERE ac.id = ? AND pr.merchant_id = ?
+     LIMIT 1`,
+    [callbackId, merchantId]
+  );
+  return rows[0] || null;
+}
+
 async function markCallbackForwarded(callbackId, forwarded = 1) {
   if (!callbackId) return;
   try {
@@ -519,6 +530,7 @@ module.exports = {
   updatePayoutStatus,
   handleCallback,
   markCallbackForwarded,
+  getCallbackForReforward,
   saveBalanceSnapshot,
   getLatestBalance,
   getMerchantBalance,

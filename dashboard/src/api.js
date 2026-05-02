@@ -45,6 +45,7 @@ export const api = {
     if (cursor) qs.set('cursor', cursor);
     return request('GET', `/axis-callbacks?${qs}`);
   },
+  reforwardCallback: (id) => request('POST', `/axis-callbacks/${id}/reforward`),
   balance: (merchantId) => request('GET', `/balance/${merchantId}`),
   fundTransfer: (payload) => request('POST', '/fund-transfer', payload),
   transferStatus: (crn) => request('POST', '/fund-transfer/status', { crn })

@@ -8,6 +8,7 @@ export default function Callbacks() {
   const [stack, setStack] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [rowState, setRowState] = useState({}); // { [id]: { status: 'loading'|'error', message?: string } }
 
   async function load(c) {
     setLoading(true);
@@ -16,6 +17,7 @@ export default function Callbacks() {
       const res = await api.callbacks({ limit: 50, cursor: c, mode: 'half' });
       setData(res);
       setCursor(c);
+      setRowState({});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -36,6 +38,25 @@ export default function Callbacks() {
     const last = stack[stack.length - 1] ?? null;
     setStack(s => s.slice(0, -1));
     load(last);
+  }
+
+  async function reforward(id) {
+    setRowState(s => ({ ...s, [id]: { status: 'loading' } }));
+    try {
+      await api.reforwardCallback(id);
+      setData(d => d && {
+        ...d,
+        callbacks: d.callbacks.map(c => c.id === id ? { ...c, callback_forwarded: 1 } : c)
+      });
+      setRowState(s => {
+        const copy = { ...s };
+        delete copy[id];
+        return copy;
+      });
+    } catch (err) {
+      const msg = err.body?.error || err.message || 'Forward failed';
+      setRowState(s => ({ ...s, [id]: { status: 'error', message: msg } }));
+    }
   }
 
   return (
@@ -59,20 +80,41 @@ export default function Callbacks() {
             {loading && (
               <SkeletonRows
                 count={5}
-                columns={['140px', '120px', '130px', '80px', '200px', '20px', '140px']}
+                columns={['140px', '120px', '130px', '80px', '200px', '90px', '140px']}
               />
             )}
-            {!loading && data?.callbacks?.map(c => (
-              <tr key={c.id}>
-                <td className="mono">{c.crn}</td>
-                <td className="mono">{c.transaction_id}</td>
-                <td className="mono">{c.utr_no}</td>
-                <td>{c.transaction_status}</td>
-                <td>{c.status_description}</td>
-                <td>{c.callback_forwarded ? '✓' : '—'}</td>
-                <td>{c.received_at && new Date(c.received_at).toLocaleString('en-GB')}</td>
-              </tr>
-            ))}
+            {!loading && data?.callbacks?.map(c => {
+              const rs = rowState[c.id];
+              return (
+                <tr key={c.id}>
+                  <td className="mono">{c.crn}</td>
+                  <td className="mono">{c.transaction_id}</td>
+                  <td className="mono">{c.utr_no}</td>
+                  <td>{c.transaction_status}</td>
+                  <td>{c.status_description}</td>
+                  <td>
+                    {c.callback_forwarded ? (
+                      '✓'
+                    ) : rs?.status === 'loading' ? (
+                      <span className="muted">Forwarding…</span>
+                    ) : rs?.status === 'error' ? (
+                      <button
+                        className="btn-small btn-secondary"
+                        onClick={() => reforward(c.id)}
+                        title={rs.message}
+                      >
+                        Retry
+                      </button>
+                    ) : (
+                      <button className="btn-small" onClick={() => reforward(c.id)}>
+                        Forward
+                      </button>
+                    )}
+                  </td>
+                  <td>{c.received_at && new Date(c.received_at).toLocaleString('en-GB')}</td>
+                </tr>
+              );
+            })}
             {!loading && data?.callbacks?.length === 0 && (
               <tr><td colSpan="7" className="muted">No callbacks yet.</td></tr>
             )}
